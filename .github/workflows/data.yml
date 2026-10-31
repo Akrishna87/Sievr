@@ -1,0 +1,67 @@
+name: Market data
+
+# Every weekday at 19:15 IST, after NSE closes and end-of-day prices settle.
+on:
+  schedule:
+    - cron: "45 13 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      refresh:
+        description: "Fundamentals to re-fetch (stalest first)"
+        default: "600"
+      universe:
+        description: "all = every NSE equity, nifty500 = Nifty 500 only"
+        default: "all"
+      limit:
+        description: "Only the first N stocks (0 = all; for testing)"
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-data
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -q -r pipeline/requirements.txt
+      - name: Restore the fundamentals cache from the last release
+        run: |
+          mkdir -p pipeline/cache
+          gh release download data-latest -p fundamentals.json.gz -D pipeline/cache || echo "No cache yet; this run fetches everything it can."
+      - name: Build the snapshot
+        working-directory: pipeline
+        run: |
+          python build_snapshot.py --out out --cache cache/fundamentals.json.gz \
+            --refresh "${{ inputs.refresh || '600' }}" \
+            --universe "${{ inputs.universe || 'all' }}" \
+            --limit "${{ inputs.limit || '0' }}" \
+            --budget-minutes 200
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check the snapshot loads in the app's engine
+        run: ./gradlew --no-daemon -q :core:checkSnapshot -Psnapshot=$PWD/pipeline/out/snapshot.json.gz -PminStocks=${{ (inputs.limit && inputs.limit != '0') && '10' || '300' }}
+      - name: Publish to the "data-latest" release
+        run: |
+          if ! gh release view data-latest >/dev/null 2>&1; then
+            gh release create data-latest --prerelease --title "Market data" \
+              --notes "Sievr's market data, rebuilt every weekday evening. The app downloads snapshot.json.gz from here."
+          fi
+          cp pipeline/cache/fundamentals.json.gz pipeline/out/
+          gh release upload data-latest pipeline/out/snapshot.json.gz pipeline/out/meta.json pipeline/out/fundamentals.json.gz --clobber
+          cat pipeline/out/meta.json
