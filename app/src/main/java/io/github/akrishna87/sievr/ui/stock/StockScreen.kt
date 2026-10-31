@@ -16,7 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddAlert
-import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -90,7 +90,7 @@ fun StockScreen(symbol: String) {
             title = { Text(symbol) },
             navigationIcon = { IconButton(onClick = { nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             actions = {
-                IconButton(onClick = { nav.compare(listOf(symbol)) }) { Icon(Icons.Default.CompareArrows, "Compare") }
+                IconButton(onClick = { nav.compare(listOf(symbol)) }) { Icon(Icons.AutoMirrored.Filled.CompareArrows, "Compare") }
                 IconButton(onClick = { alertDialog = true }) { Icon(Icons.Default.AddAlert, "Price alert") }
                 IconButton(onClick = { store.toggleWatch(symbol) }) {
                     Icon(if (watched) Icons.Default.Star else Icons.Default.StarBorder, if (watched) "Remove from watchlist" else "Add to watchlist",

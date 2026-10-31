@@ -33,11 +33,13 @@ android {
                 keyAlias = System.getenv("SIGNING_KEY_ALIAS")
                 keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
             } else {
+                // CI keeps a debug-style key in its cache (DEBUG_KEYSTORE); locally, the SDK's debug key.
+                val ciKey = System.getenv("DEBUG_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
                 val debug = signingConfigs.getByName("debug")
-                storeFile = debug.storeFile
-                storePassword = debug.storePassword
-                keyAlias = debug.keyAlias
-                keyPassword = debug.keyPassword
+                storeFile = ciKey ?: debug.storeFile
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
             }
         }
     }

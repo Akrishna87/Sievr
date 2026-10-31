@@ -18,7 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
@@ -83,7 +83,7 @@ fun MoreScreen() {
     Scaffold(topBar = { TopAppBar(title = { Text("More") }) }) { padding ->
         LazyColumn(Modifier.padding(padding)) {
             item { MoreItem(Icons.Default.Notifications, "Alerts", "Price, RSI and 52-week alerts; screen alerts") { nav.go(Routes.ALERTS) } }
-            item { MoreItem(Icons.Default.CompareArrows, "Compare stocks", "Up to four side by side") { nav.compare() } }
+            item { MoreItem(Icons.AutoMirrored.Filled.CompareArrows, "Compare stocks", "Up to four side by side") { nav.compare() } }
             item { MoreItem(Icons.Default.ViewModule, "Sectors", "Performance by sector over 1 day to 1 year") { nav.go(Routes.SECTORS) } }
             item { MoreItem(Icons.Default.Functions, "Formula guide", "Every metric name for custom screens") { nav.go(Routes.FORMULA_HELP) } }
             item { MoreItem(Icons.Default.Settings, "Settings", "Theme, notifications, data") { nav.go(Routes.SETTINGS) } }
