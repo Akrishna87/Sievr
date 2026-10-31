@@ -20,7 +20,7 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
-        buildConfigField("String", "DATA_URL", "\"https://github.com/Akrishna87/sievr/releases/download/data-latest/\"")
+        buildConfigField("String", "DATA_URL", "\"https://github.com/Akrishna87/Sievr/releases/download/data-latest/\"")
     }
 
     signingConfigs {

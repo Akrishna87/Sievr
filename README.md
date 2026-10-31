@@ -3,7 +3,7 @@
 **A free stock screener for Indian markets (NSE), for Android.** No account, no paywall: the features other
 screeners charge for are calculated on the phone from one end-of-day data file that's rebuilt every weekday evening.
 
-**Download:** `Sievr.apk` from the [`app-latest` release](https://github.com/Akrishna87/sievr/releases/tag/app-latest).
+**Download:** `Sievr.apk` from the [`app-latest` release](https://github.com/Akrishna87/Sievr/releases/tag/app-latest).
 
 ## Features
 
