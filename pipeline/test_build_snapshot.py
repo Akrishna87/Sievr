@@ -46,3 +46,29 @@ def test_statements():
     recs = b.statements([inc, pd.DataFrame(), cf], 1.0)
     assert [r["year"] for r in recs] == [2024, 2025]
     assert recs[1]["revenue"] == 1200.0 and recs[1]["capex"] == 60.0 and recs[1]["eps"] == 1.2
+
+
+XBRL = """<xbrli:xbrl>
+<in-bse-shp:DateOfReport contextRef="MainI">2026-09-30</in-bse-shp:DateOfReport>
+<in-bse-shp:WhetherAnySharesHeldByPromotersAreEncumberedUnderPledged contextRef="MainI">false</in-bse-shp:WhetherAnySharesHeldByPromotersAreEncumberedUnderPledged>
+<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="ShareholdingOfPromoterAndPromoterGroup_ContextI" unitRef="pure" decimals="INF">0.6603</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>
+<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="InstitutionsForeign_ContextI" unitRef="pure">0.1595</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>
+<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="InstitutionsDomestic_ContextI" unitRef="pure">0.1325</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>
+<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="MutualFundsOrUTI_ContextI" unitRef="pure">0.0495</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>
+<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="MutualFundsOrUTI_Context15" unitRef="pure">0.0254</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>
+<in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares contextRef="PublicShareholding_ContextI" unitRef="pure">0.3397</in-bse-shp:ShareholdingAsAPercentageOfTotalNumberOfShares>
+</xbrli:xbrl>"""
+
+
+def test_shareholding_parse_and_summary():
+    import shareholding as sh
+    q = sh.parse_xbrl(XBRL)
+    assert q == {"promoter": 66.03, "fii": 15.95, "dii": 13.25, "mf": 4.95, "public": 33.97, "pledged": 0.0, "date": "2026-09-30"}
+    pledged = sh.parse_xbrl(XBRL.replace(">false<", ">true<").replace("</xbrli:xbrl>",
+        '<in-bse-shp:SharesPledgedOrOtherwiseEncumberedAsAPercentageOfTotalSharesHeld contextRef="ShareholdingOfPromoterAndPromoterGroup_ContextI">0.25</in-bse-shp:SharesPledgedOrOtherwiseEncumberedAsAPercentageOfTotalSharesHeld></xbrli:xbrl>'))
+    assert pledged["pledged"] == 25.0
+    assert sh.parse_xbrl("<x/>") is None
+    prev = dict(q, date="2026-06-30", promoter=65.0, fii=17.0)
+    s = sh.summarize([prev, q])
+    assert s["promoter"] == 66.03 and s["promoterChange"] == 1.03 and s["fiiChange"] == -1.05 and s["asOf"] == "2026-09-30"
+    assert sh.summarize([]) is None

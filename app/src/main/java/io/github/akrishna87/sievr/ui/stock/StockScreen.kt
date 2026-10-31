@@ -508,21 +508,40 @@ private fun OwnershipTab(stock: Stock) {
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             SectionHeader("Shareholding")
-            val parts = listOfNotNull(
+            if (h?.asOf != null) Text("From the NSE filing for the quarter ended ${Fmt.isoDate(h.asOf!!)}", Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val parts = listOf(
                 (if (h?.promoter != null) "Promoters" else "Insiders / promoters") to stock["promoter"],
-                "FIIs" to stock["fii"], "DIIs" to stock["dii"],
+                "FIIs / FPIs" to stock["fii"],
+                "DIIs" to stock["dii"],
+                "  of which mutual funds" to stock["mf"],
                 "Institutions (all)" to (if (h?.fii == null) stock["institutions"] else null),
-                "Public" to h?.public,
+                "Retail (up to ₹2 lakh)" to stock["retail"],
+                "Public (all non-promoters)" to h?.public,
             ).filter { it.second != null }.map { it.first to it.second!! }
             if (parts.isEmpty()) Text("No shareholding data yet.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else Column(Modifier.padding(horizontal = 16.dp)) { BarList(parts, { Fmt.percent(it) }) }
+            else Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { BarList(parts, { Fmt.percent(it) }) }
         }
         item {
-            SectionHeader("Changes last quarter")
-            MetricGrid(metricPairs(stock, listOf("promoterChange", "fiiChange", "diiChange", "pledged")), columns = 2)
+            SectionHeader("Change from the previous quarter")
+            MetricGrid(metricPairs(stock, listOf("promoterChange", "fiiChange", "diiChange", "mfChange")), columns = 2)
+        }
+        item {
+            SectionHeader("Promoter pledge")
+            val pledged = stock["pledged"]
+            Text(
+                when {
+                    pledged == null -> "Not reported in the latest filing."
+                    pledged == 0.0 -> "No promoter shares are pledged."
+                    else -> "${Fmt.percent(pledged)} of promoter shares are pledged." +
+                        if (pledged > 25) " High pledging can force share sales if the price falls." else ""
+                },
+                Modifier.padding(horizontal = 16.dp),
+                color = if ((pledged ?: 0.0) > 25) LocalMarketColors.current.down else MaterialTheme.colorScheme.onSurface,
+            )
             if (h == null) Text(
-                "Quarterly promoter, FII, DII and pledge figures come from NSE shareholding filings and are being added to the data feed. " +
-                    "Until then Sievr shows insider and institutional holdings.",
+                "No NSE shareholding filing has been read for ${stock.symbol} yet; filings are fetched a few hundred companies a night. " +
+                    "Until then Sievr shows Yahoo's insider and institutional figures.",
                 Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

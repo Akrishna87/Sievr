@@ -33,6 +33,8 @@ from typing import Any, Iterable
 import pandas as pd
 import requests
 
+import shareholding
+
 log = logging.getLogger("sievr")
 
 NSE_EQUITY_LIST = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -354,7 +356,7 @@ def refresh_fundamentals(symbols: list[str], cache: dict[str, dict], limit: int,
 # ----------------------------------------------------------------------------- assemble
 
 def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: dict[str, pd.DataFrame],
-          bench: dict[str, pd.DataFrame], cache: dict[str, dict]) -> dict:
+          bench: dict[str, pd.DataFrame], cache: dict[str, dict], holdings: dict[str, dict] | None = None) -> dict:
     ref = bench.get("NIFTY 50")
     if ref is None or ref.empty:
         ref = max(prices.values(), key=len)
@@ -380,6 +382,7 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
             "indices": memberships.get(sym, []),
             "f": fund.get("f", {}),
             "fin": fund.get("fin", []),
+            "holding": shareholding.summarize((holdings or {}).get(sym, {}).get("quarters", [])),
             **rec,
         }
         stocks.append({k: v for k, v in stock.items() if v not in (None, [], {})})
@@ -394,7 +397,7 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
         "version": 1,
         "asOf": daily_dates[-1].date().isoformat(),
         "generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "source": "NSE (listings, index constituents); Yahoo Finance (prices, fundamentals)",
+        "source": "NSE (listings, index constituents, shareholding filings); Yahoo Finance (prices, fundamentals)",
         "dailyDates": [epoch_day(d) for d in daily_dates],
         "weeklyDates": [epoch_day(d) for d in weekly_dates],
         "stocks": stocks,
@@ -421,6 +424,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cache", default="cache/fundamentals.json.gz")
     ap.add_argument("--refresh", type=int, default=600, help="fundamentals to re-fetch this run")
     ap.add_argument("--budget-minutes", type=float, default=150, help="time limit for fundamentals")
+    ap.add_argument("--holding-cache", default="cache/shareholding.json.gz")
+    ap.add_argument("--holding-refresh", type=int, default=500, help="companies whose NSE shareholding filings to re-check")
+    ap.add_argument("--holding-budget-minutes", type=float, default=45)
     ap.add_argument("--universe", choices=["all", "nifty500"], default="all")
     ap.add_argument("--limit", type=int, default=0, help="only the first N symbols (testing)")
     args = ap.parse_args(argv)
@@ -449,7 +455,20 @@ def main(argv: list[str] | None = None) -> int:
     refresh_fundamentals(with_prices, cache, max(args.refresh, missing if missing < 3000 else args.refresh), args.budget_minutes * 60)
     write_gz_json(args.cache, cache)
 
-    snapshot = build(universe, memberships, prices, bench, cache)
+    holdings: dict[str, dict] = {}
+    if os.path.exists(args.holding_cache):
+        holdings = read_gz_json(args.holding_cache)
+        log.info("shareholding cache: %d entries", len(holdings))
+    if args.holding_refresh > 0:
+        try:
+            missing = sum(1 for s in with_prices if s not in holdings)
+            n = shareholding.refresh(with_prices, holdings, max(args.holding_refresh, min(missing, 3000)), args.holding_budget_minutes * 60)
+            log.info("shareholding refreshed for %d companies", n)
+        except Exception as e:  # noqa: BLE001
+            log.warning("shareholding refresh failed: %s", e)
+        write_gz_json(args.holding_cache, holdings)
+
+    snapshot = build(universe, memberships, prices, bench, cache, holdings)
     size = write_gz_json(os.path.join(args.out, "snapshot.json.gz"), snapshot)
     meta = {"asOf": snapshot["asOf"], "generatedAt": snapshot["generatedAt"], "stocks": len(snapshot["stocks"]), "bytes": size}
     with open(os.path.join(args.out, "meta.json"), "w") as f:

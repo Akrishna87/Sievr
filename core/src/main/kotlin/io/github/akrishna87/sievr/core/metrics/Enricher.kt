@@ -164,6 +164,9 @@ object Enricher {
         put("promoterChange", h?.promoterChange)
         put("fiiChange", h?.fiiChange)
         put("diiChange", h?.diiChange)
+        put("mf", h?.mf)
+        put("mfChange", h?.mfChange)
+        put("retail", h?.retail)
 
         // Analysts
         val target = rawOf("targetPrice")

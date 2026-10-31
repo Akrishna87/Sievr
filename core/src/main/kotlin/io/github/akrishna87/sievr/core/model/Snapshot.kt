@@ -93,8 +93,15 @@ data class Shareholding(
     val fii: Double? = null,
     val dii: Double? = null,
     val public: Double? = null,
+    /** Mutual funds (part of DII). */
+    val mf: Double? = null,
+    /** Resident individuals holding up to ₹2 lakh each. */
+    val retail: Double? = null,
     /** Change in promoter holding over the last quarter, percentage points. */
     val promoterChange: Double? = null,
     val fiiChange: Double? = null,
     val diiChange: Double? = null,
+    val mfChange: Double? = null,
+    /** Quarter-end date of the filing, yyyy-MM-dd. */
+    val asOf: String? = null,
 )

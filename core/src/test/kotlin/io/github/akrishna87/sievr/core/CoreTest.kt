@@ -183,3 +183,23 @@ class PlainEnglishTest {
         assertEquals(MetricFilter("divYield", Op.BETWEEN, 2.0, 5.0), metrics["divYield"])
     }
 }
+
+class ShareholdingTest {
+    @Test fun holdingFlowsIntoMetricsAndScreens() {
+        val base = TestData.snapshot()
+        val withHolding = base.copy(stocks = base.stocks.mapIndexed { i, s ->
+            if (i == 0) s.copy(holding = io.github.akrishna87.sievr.core.model.Shareholding(
+                promoter = 66.0, pledged = 0.0, fii = 16.0, dii = 13.0, mf = 5.0, public = 34.0, retail = 3.1,
+                promoterChange = 0.2, fiiChange = 1.2, diiChange = -0.3, mfChange = 0.8, asOf = "2026-09-30")) else s
+        })
+        val market = Enricher.enrich(withHolding)
+        val good = market["GOOD"]!!
+        assertEquals(66.0, good["promoter"]); assertEquals(29.0, good["institutions"]); assertEquals(0.8, good["mfChange"])
+        val smart = Presets["smart-money"]!!
+        assertEquals(listOf("GOOD"), ScreenEngine.run(smart, market.stocks).map { it.symbol })
+        assertEquals(listOf("GOOD"), ScreenEngine.run(Presets["mf-buying"]!!, market.stocks).map { it.symbol })
+        val json = """{"asOf":"x","stocks":[{"symbol":"A","name":"A","holding":{"promoter":50.5,"mf":4.2,"asOf":"2026-09-30","unknown":1}}]}"""
+        val snap = io.github.akrishna87.sievr.core.model.SnapshotIO.read(json.byteInputStream())
+        assertEquals(4.2, snap.stocks.single().holding!!.mf)
+    }
+}

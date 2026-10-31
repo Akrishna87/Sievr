@@ -20,7 +20,7 @@ fun main(args: Array<String>) {
     val took = System.currentTimeMillis() - started
     println("Snapshot ${snapshot.asOf}: ${market.stocks.size} stocks, ${snapshot.dailyDates.size} days, ${snapshot.weeklyDates.size} weeks, ${snapshot.indices.size} indices; loaded in ${took} ms")
 
-    val coverage = listOf("price", "mcap", "pe", "roe", "roce", "salesCagr3", "de", "divYield", "promoter", "rsi14", "sma200", "qualityScore", "sievrScore")
+    val coverage = listOf("price", "mcap", "pe", "roe", "roce", "salesCagr3", "de", "divYield", "promoter", "fii", "mf", "pledged", "rsi14", "sma200", "qualityScore", "sievrScore")
     for (id in coverage) {
         val n = market.stocks.count { it[id] != null }
         println("  %-14s %5d (%.0f%%)".format(id, n, n * 100.0 / maxOf(1, market.stocks.size)))

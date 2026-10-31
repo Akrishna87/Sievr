@@ -93,14 +93,17 @@ object Metrics {
         m("payout", "Payout ratio", DIVIDENDS, MetricUnit.PERCENT, "Share of profit paid out as dividends.", aliases = listOf("payout_ratio", "dividend_payout")),
 
         // Ownership
-        m("promoter", "Promoter holding", OWNERSHIP, MetricUnit.PERCENT, "Shares held by promoters (insiders when the source has no promoter split).", aliases = listOf("promoter_holding", "insiders")),
+        m("promoter", "Promoter holding", OWNERSHIP, MetricUnit.PERCENT, "Shares held by promoters and the promoter group, from the latest NSE shareholding filing (Yahoo's insider figure when there's no filing).", aliases = listOf("promoter_holding", "insiders")),
         m("pledged", "Promoter pledge", OWNERSHIP, MetricUnit.PERCENT, "Share of promoter holding pledged.", false, listOf("pledge", "pledged_percentage")),
         m("fii", "FII holding", OWNERSHIP, MetricUnit.PERCENT, "Foreign institutional holding.", aliases = listOf("fii_holding", "fpi")),
         m("dii", "DII holding", OWNERSHIP, MetricUnit.PERCENT, "Domestic institutional holding (mutual funds, insurers…).", aliases = listOf("dii_holding")),
         m("institutions", "Institutional holding", OWNERSHIP, MetricUnit.PERCENT, "All institutions (FII + DII).", aliases = listOf("institutional_holding")),
+        m("mf", "Mutual fund holding", OWNERSHIP, MetricUnit.PERCENT, "Shares held by mutual funds (part of DII).", aliases = listOf("mf_holding", "mutual_funds")),
+        m("retail", "Retail holding", OWNERSHIP, MetricUnit.PERCENT, "Resident individuals holding up to ₹2 lakh each.", aliases = listOf("retail_holding")),
         m("promoterChange", "Promoter holding change (QoQ)", OWNERSHIP, MetricUnit.PERCENT, "Change in promoter holding over the last quarter, percentage points.", true, listOf("promoter_change")),
         m("fiiChange", "FII holding change (QoQ)", OWNERSHIP, MetricUnit.PERCENT, "Change in FII holding over the last quarter, percentage points.", true, listOf("fii_change")),
         m("diiChange", "DII holding change (QoQ)", OWNERSHIP, MetricUnit.PERCENT, "Change in DII holding over the last quarter, percentage points.", true, listOf("dii_change")),
+        m("mfChange", "MF holding change (QoQ)", OWNERSHIP, MetricUnit.PERCENT, "Change in mutual fund holding over the last quarter, percentage points.", true, listOf("mf_change")),
 
         // Analysts
         m("targetPrice", "Analyst target", ANALYSTS, MetricUnit.RUPEE, "Average analyst price target.", aliases = listOf("target_price")),

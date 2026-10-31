@@ -10,8 +10,8 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 **Screening**
 - 120+ metrics: valuation, profitability, growth, financial health, cash flow, dividends, ownership, analyst targets,
   technicals and 17 candlestick patterns
-- 37 ready-made screens: Magic Formula, Graham's defensive investor, Coffee Can, Piotroski 8+, Lynch GARP,
-  Buffett-style moats, golden cross, 52-week breakouts on volume, oversold quality, promoter buying, pledge red flags…
+- 39 ready-made screens: Magic Formula, Graham's defensive investor, Coffee Can, Piotroski 8+, Lynch GARP,
+  Buffett-style moats, golden cross, 52-week breakouts on volume, oversold quality, promoter buying, mutual funds buying, pledge red flags…
 - **Plain-English screens**, worked out offline: *"profitable small caps with low debt, ROE above 20 and rising margins in pharma"*
 - **Custom formulas**: `PE < Industry_PE AND ROCE > 20 AND Price > SMA200`
 - Sector, industry, index (Nifty 50/100/500, Midcap 150, Smallcap 250…) and pattern filters
@@ -23,7 +23,8 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 **Research**
 - Stock pages with interactive price charts (1M to 5Y, with 50/200-day averages), five factor scores
   (quality, value, growth, momentum, safety), an at-a-glance checklist, 4–5 years of financial statements,
-  technical signals, peer comparison and shareholding
+  technical signals, peer comparison and quarterly shareholding from NSE filings (promoter, FII, DII, mutual fund,
+  retail, pledges and quarter-on-quarter changes)
 - Fair value: interactive DCF, reverse DCF ("what growth is priced in"), Graham number, Graham growth formula, Lynch value, analyst targets
 - Piotroski F-score, Altman Z-score, Magic Formula rank, PEG, earnings yield, cash conversion, ROCE consistency
 - Compare up to four stocks side by side
@@ -39,6 +40,7 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 ```
 pipeline/          Python, runs on GitHub Actions every weekday 19:15 IST
   build_snapshot.py   NSE listings + index lists, Yahoo Finance prices and fundamentals
+  shareholding.py     quarterly shareholding patterns from NSE's XBRL filings
                       → snapshot.json.gz on the data-latest release (~5–10 MB)
 core/              Plain Kotlin, no Android: the engine
   metrics/            metric catalog, enrichment (ratios, technicals, scores)
@@ -72,8 +74,17 @@ the Play Store), add the repository secrets `SIGNING_KEYSTORE_BASE64`, `SIGNING_
 
 Yahoo Finance data is fine for development and personal use. Before a commercial or Play Store launch, replace
 `fetch_prices` and `fetch_fundamentals` in `pipeline/build_snapshot.py` with a licensed Indian market-data feed; the
-app and engine only read the snapshot format, so nothing else changes. Quarterly shareholding (promoter / FII / DII /
-pledge) fields are supported by the format and the app, and are the next addition to the pipeline.
+app and engine only read the snapshot format, so nothing else changes.
+
+Shareholding comes from the quarterly shareholding-pattern filings companies make on NSE. Filings change once a
+quarter, so the pipeline re-checks about 500 companies a night (45 minutes at most, with pauses between requests) and
+caches the results in `shareholding.json.gz` on the data release; a full first pass takes a few nights.
+
+## Publishing on Google Play
+
+- Each build attaches **Sievr.aab** (the bundle Play needs) to the `app-latest` release.
+- Store listing text and Play Console answers: [docs/play-store-listing.md](docs/play-store-listing.md)
+- Privacy policy (use this URL in Play): [docs/privacy-policy.md](docs/privacy-policy.md)
 
 ## Disclaimer
 
