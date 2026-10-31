@@ -15,16 +15,21 @@ for sym in sys.argv[1:] or ["RELIANCE"]:
             d = r.json()
         except Exception:
             print(r.text[:300]); continue
-        print(json.dumps(d if not isinstance(d, list) else d[:2], indent=1)[:2500])
+        print(json.dumps(d if not isinstance(d, list) else d[:3], indent=1)[:3000])
         if "share-holdings" in url and isinstance(d, list) and d:
             x = d[0].get("xbrl")
             if x:
                 xr = s.get(x, timeout=30); print("\n== xbrl", x, xr.status_code, len(xr.content))
                 t = xr.text
-                facts = re.findall(r"<([\w-]+:[\w]+)[^>]*contextRef=\"([^\"]+)\"[^>]*>([^<]{0,40})<", t)
+                facts = re.findall(r"<([\w-]+:[\w]+)[^>]*contextRef=\"([^\"]+)\"[^>]*>([^<]{0,60})<", t)
                 print("facts", len(facts))
                 for name, ctx, val in facts:
-                    if any(k in name for k in ("Percentage", "Pledge", "Encumb")):
-                        print(name, ctx, val)
-                ctxs = sorted(set(c for _, c, _ in facts)); print("contexts", len(ctxs)); print("\n".join(ctxs[:200]))
+                    if (ctx.endswith("_ContextI") or ctx in ("MainI", "MainD")) and ("Percentage" in name or "Pledge" in name or "Encumb" in name or "NumberOfShares" in name):
+                        print("F", name, ctx, val)
+                for name, ctx, val in facts:
+                    if ("Pledge" in name or "Encumb" in name) and val.strip() not in ("0", ""):
+                        print("P", name, ctx, val)
+                for name, ctx, val in facts:
+                    if ctx in ("MainI", "MainD") and not val.strip().replace(".", "").isdigit():
+                        print("M", name, ctx, val)
         time.sleep(1)
