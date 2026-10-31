@@ -63,23 +63,19 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           set +e
-          ./gradlew --no-daemon :core:test :app:testReleaseUnitTest :app:assembleRelease :app:bundleRelease 2>&1 | tee build.log
+          ./gradlew --no-daemon :core:test :app:testReleaseUnitTest :app:assembleRelease 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
           if [ "$status" != 0 ]; then
             echo "=== Errors ==="
             grep -E '^e: |error:|FAILED|What went wrong' -A3 build.log | sed 's|file:///home/runner/work/sievr/sievr/||' | tail -150
           fi
           exit $status
-      - name: Name the APK and the Play Store bundle
-        run: |
-          cp app/build/outputs/apk/release/app-release.apk Sievr.apk
-          cp app/build/outputs/bundle/release/app-release.aab Sievr.aab
+      - name: Name the APK
+        run: cp app/build/outputs/apk/release/app-release.apk Sievr.apk
       - uses: actions/upload-artifact@v4
         with:
           name: Sievr-apk
-          path: |
-            Sievr.apk
-            Sievr.aab
+          path: Sievr.apk
 
   smoke-test:
     needs: build
@@ -132,8 +128,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release delete app-latest --cleanup-tag --yes || true
-          gh release create app-latest out/Sievr.apk out/Sievr.aab screens/*.png \
+          gh release create app-latest out/Sievr.apk screens/*.png \
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "Sievr for Android (build ${{ github.run_number }})" \
-            --notes "Download **Sievr.apk** on your Android phone, open it, and allow installing from your browser when asked. Market data updates every weekday evening from the \`data-latest\` release. Sievr.aab is the bundle for the Google Play Console. The PNG files are screenshots from this build's automatic emulator test."
+            --notes "Download **Sievr.apk** on your Android phone, open it, and allow installing from your browser when asked. Market data updates every weekday evening from the \`data-latest\` release. The PNG files are screenshots from this build's automatic emulator test."

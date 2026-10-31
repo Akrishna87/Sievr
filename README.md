@@ -66,13 +66,14 @@ CI builds the APK on every push and publishes it from `main`. Run the **Market d
 the first snapshot (it takes 1–3 hours the first time while it fetches fundamentals for every company; after that
 it refreshes about 600 companies' fundamentals a night and every price).
 
-**Signing:** without secrets, CI signs with a debug key kept in the Actions cache. For a permanent key (needed for
-the Play Store), add the repository secrets `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and
+**Signing:** without secrets, CI signs with a debug key kept in the Actions cache. Updates only install over the
+previous version when they're signed with the same key, and the Actions cache can expire after a week without builds,
+so for a permanent key add the repository secrets `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS` and
 `SIGNING_KEY_PASSWORD`.
 
 ## Data and licensing
 
-Yahoo Finance data is fine for development and personal use. Before a commercial or Play Store launch, replace
+Yahoo Finance data is fine for personal use among friends and family. If Sievr is ever offered publicly, replace
 `fetch_prices` and `fetch_fundamentals` in `pipeline/build_snapshot.py` with a licensed Indian market-data feed; the
 app and engine only read the snapshot format, so nothing else changes.
 
@@ -80,11 +81,17 @@ Shareholding comes from the quarterly shareholding-pattern filings companies mak
 quarter, so the pipeline re-checks about 500 companies a night (45 minutes at most, with pauses between requests) and
 caches the results in `shareholding.json.gz` on the data release; a full first pass takes a few nights.
 
-## Publishing on Google Play
+## Sharing with friends and family
 
-- Each build attaches **Sievr.aab** (the bundle Play needs) to the `app-latest` release.
-- Store listing text and Play Console answers: [docs/play-store-listing.md](docs/play-store-listing.md)
-- Privacy policy (use this URL in Play): [docs/privacy-policy.md](docs/privacy-policy.md)
+Sievr isn't on the Play Store. Send people this link and ask them to open it on their Android phone:
+
+**https://github.com/Akrishna87/Sievr/releases/download/app-latest/Sievr.apk**
+
+Android will ask them to allow installing apps from their browser (or WhatsApp, if you send the file there) the first
+time. To update, they download and open the same link again; it installs over the old version and keeps their screens,
+watchlists and portfolio. Market data updates by itself every weekday evening.
+
+Every feature is free for everyone. There is no account, no premium tier and nothing to unlock.
 
 ## Disclaimer
 
