@@ -1,0 +1,12 @@
+name: Probe names (temporary)
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q -r pipeline/requirements.txt && python pipeline/probe_names.py 2>&1 | grep -v Pandas4Warning | grep -v "pandas.pydata" | grep -v inplace
