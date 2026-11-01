@@ -97,3 +97,29 @@ def test_build_carries_exchanges():
                    {"X.BO": frame(1600, 100)}, {"NIFTY 50": nifty}, {})
     (s,) = snap["stocks"]
     assert s["exchanges"] == ["BSE"] and s["bseCode"] == "500001"
+
+
+def test_names():
+    import names as n
+    assert n.clean("National Stock Exchange of Ind", "INE721I01024") == "National Stock Exchange of India Limited"
+    assert n.clean("FLY-HI MARITIME TRAVELS LIMITE") == "Fly-Hi Maritime Travels Limited"
+    assert n.clean("HIMALAYA NUTRAVEDICS INDIA LIM") == "Himalaya Nutravedics India Limited"
+    assert n.clean("MAGNANIMOUS TRADE & FINANCE LT") == "Magnanimous Trade & Finance Ltd"
+    assert n.clean("Tipco Engineering India Limite") == "Tipco Engineering India Limited"
+    assert n.clean("Some Company Holdings of Ind") == "Some Company Holdings of India"
+    assert n.clean("63 moons technologies limited") == "63 Moons Technologies Limited"
+    # Complete, mixed-case names and short names are left alone.
+    assert n.clean("Aadhar Housing Finance Limited") == "Aadhar Housing Finance Limited"
+    assert n.clean("ABB India Limited") == "ABB India Limited"
+    assert n.clean("ABC GAS INTERNATIONAL LTD") == "ABC Gas International Ltd"
+    assert n.clean("Reliance Industries Limited") == "Reliance Industries Limited"
+    assert n.clean(None) is None
+
+
+def test_names_abbreviated_and_brackets():
+    import names as n
+    assert n.clean("KARAMTARA ENGINEERING L") == "Karamtara Engineering Limited"
+    assert n.clean("ASSET RECONSTRUC CO (I) L") == "Asset Reconstruc Co (I) Limited"
+    assert n.clean("JINDAL SUPREME (INDIA) L") == "Jindal Supreme (India) Limited"
+    assert n.clean("ntc industries limited") == "NTC Industries Limited"
+    assert n.clean("GAJA ALT ASSET MGT LTD") == "Gaja Alt Asset MGT Ltd"

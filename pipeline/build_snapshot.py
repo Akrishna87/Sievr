@@ -33,6 +33,7 @@ from typing import Any, Iterable
 import pandas as pd
 import requests
 
+import names
 import shareholding
 
 log = logging.getLogger("sievr")
@@ -435,7 +436,7 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
         fund = cache.get(sym, {})
         stock = {
             "symbol": sym,
-            "name": fund.get("name") or base["name"],
+            "name": names.clean(fund.get("name") or base["name"], base.get("isin")),
             "isin": base.get("isin"),
             "sector": fund.get("sector") or base.get("niftyIndustry"),
             "industry": fund.get("industry") or base.get("niftyIndustry"),
