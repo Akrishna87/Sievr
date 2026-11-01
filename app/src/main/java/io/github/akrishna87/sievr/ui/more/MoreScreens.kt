@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
@@ -88,6 +89,7 @@ fun MoreScreen() {
             item { MoreItem(Icons.Default.Functions, "Formula guide", "Every metric name for custom screens") { nav.go(Routes.FORMULA_HELP) } }
             item { MoreItem(Icons.Default.Settings, "Settings", "Theme, notifications, data") { nav.go(Routes.SETTINGS) } }
             item { MoreItem(Icons.Default.Info, "About Sievr", "Data sources, disclaimer, version") { nav.go(Routes.ABOUT) } }
+            item { UpdateItem() }
             item {
                 val m = (state as? io.github.akrishna87.sievr.data.MarketState.Ready)?.market
                 Text(
@@ -367,4 +369,33 @@ fun FormulaHelpScreen() {
             }
         }
     }
+}
+
+@Composable
+private fun UpdateItem() {
+    val updates = SievrApp.instance.updates
+    val available by updates.available.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var checked by remember { mutableStateOf(false) }
+    val v = available
+    ListItem(
+        headlineContent = { Text(if (v != null) "Update to ${v.versionName}" else "Check for updates") },
+        supportingContent = {
+            Text(
+                when {
+                    v != null -> "Tap to download, then open the file. Your data is kept."
+                    checking -> "Checking…"
+                    checked -> "You have the latest version (${BuildConfig.VERSION_NAME})."
+                    else -> "Installed: ${BuildConfig.VERSION_NAME}"
+                },
+            )
+        },
+        leadingContent = { Icon(Icons.Default.SystemUpdate, null) },
+        modifier = Modifier.clickable {
+            if (v != null) context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(updates.apkUrl)))
+            else if (!checking) scope.launch { checking = true; updates.check(); checking = false; checked = true }
+        },
+    )
 }

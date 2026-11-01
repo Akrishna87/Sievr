@@ -20,6 +20,9 @@ class DailyUpdateWorker(context: Context, params: WorkerParameters) : CoroutineW
 
     override suspend fun doWork(): Result {
         val app = applicationContext as SievrApp
+        app.updates.check()?.let { v ->
+            if (app.updates.shouldNotify(v)) Notifier.showUpdate(applicationContext, v.versionName, app.updates.apkUrl)
+        }
         app.market.refresh(force = false)
         val market = app.market.market ?: return Result.retry()
         evaluate(applicationContext, market, app.user)

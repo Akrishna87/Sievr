@@ -127,8 +127,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # The app reads version.json to tell people a newer build is ready.
+          cat > out/version.json <<JSON
+          {"versionCode": ${{ github.run_number }}, "versionName": "0.1.${{ github.run_number }}", "apk": "Sievr.apk",
+           "sha256": "$(sha256sum out/Sievr.apk | cut -d' ' -f1)", "size": $(stat -c %s out/Sievr.apk)}
+          JSON
           gh release delete app-latest --cleanup-tag --yes || true
-          gh release create app-latest out/Sievr.apk screens/*.png \
+          gh release create app-latest out/Sievr.apk out/version.json screens/*.png \
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "Sievr for Android (build ${{ github.run_number }})" \

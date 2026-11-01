@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +33,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,6 +79,8 @@ fun SievrRoot(pendingSymbol: MutableState<String?>) {
     val context = LocalContext.current
 
     LaunchedEffect(Unit) { app.market.start() }
+    LaunchedEffect(Unit) { app.updates.check() }
+    val update by app.updates.available.collectAsStateWithLifecycle()
 
     // Run alerts once new data has loaded while the app is open.
     val marketState by app.market.state.collectAsStateWithLifecycle()
@@ -129,7 +133,9 @@ fun SievrRoot(pendingSymbol: MutableState<String?>) {
             val showBar = tabs.any { t -> current?.hierarchy?.any { it.route == t.route } == true }
             Scaffold(
                 bottomBar = {
-                    if (showBar) NavigationBar {
+                    if (showBar) Column {
+                    update?.let { v -> UpdateBar(v.versionName) { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(app.updates.apkUrl))) } }
+                    NavigationBar {
                         tabs.forEach { tab ->
                             NavigationBarItem(
                                 selected = current?.hierarchy?.any { it.route == tab.route } == true,
@@ -144,6 +150,7 @@ fun SievrRoot(pendingSymbol: MutableState<String?>) {
                                 label = { Text(tab.label) },
                             )
                         }
+                    }
                     }
                 },
             ) { padding ->
@@ -169,6 +176,21 @@ fun SievrRoot(pendingSymbol: MutableState<String?>) {
                     composable(Routes.SECTORS) { SectorsScreen() }
                 }
             }
+        }
+    }
+}
+
+/** "A new version is ready" strip above the tabs; tapping downloads the APK in the browser. */
+@Composable
+private fun UpdateBar(versionName: String, onUpdate: () -> Unit) {
+    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Text("Sievr $versionName is ready", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer)
+            TextButton(onClick = onUpdate) { Text("Update") }
         }
     }
 }
