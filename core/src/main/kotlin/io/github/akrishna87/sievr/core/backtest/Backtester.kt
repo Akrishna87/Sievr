@@ -3,6 +3,7 @@ package io.github.akrishna87.sievr.core.backtest
 import io.github.akrishna87.sievr.core.metrics.Metrics
 import io.github.akrishna87.sievr.core.model.Market
 import io.github.akrishna87.sievr.core.model.Stock
+import io.github.akrishna87.sievr.core.screen.ExchangeFilter
 import io.github.akrishna87.sievr.core.screen.Filter
 import io.github.akrishna87.sievr.core.screen.FormulaFilter
 import io.github.akrishna87.sievr.core.screen.IndexFilter
@@ -164,7 +165,7 @@ object Backtester {
     private fun matchesAt(filter: Filter, stock: Stock, lookup: (String) -> Double?): Boolean = when (filter) {
         is MetricFilter -> filter.test(lookup(filter.metric))
         is FormulaFilter -> filter.matches(lookup)
-        is SectorFilter, is IndustryFilter, is IndexFilter -> filter.matches(stock)
+        is SectorFilter, is IndustryFilter, is IndexFilter, is ExchangeFilter -> filter.matches(stock)
         // Candlestick patterns need daily bars, which only exist for recent sessions.
         is PatternFilter -> false
     }

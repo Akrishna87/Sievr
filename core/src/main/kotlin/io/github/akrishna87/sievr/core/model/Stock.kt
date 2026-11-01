@@ -12,6 +12,9 @@ class Stock(
     val name: String get() = data.name
     val sector: String get() = data.sector ?: "Other"
     val industry: String get() = data.industry ?: sector
+    val exchanges: List<String> get() = data.exchanges.ifEmpty { listOf("NSE") }
+    /** True for companies listed on BSE but not NSE. */
+    val bseOnly: Boolean get() = "NSE" !in exchanges
 
     operator fun get(metricId: String): Double? = metrics[metricId]
 
@@ -30,6 +33,7 @@ class Market(
     val sectors: List<String> by lazy { stocks.map { it.sector }.distinct().sorted() }
     val industries: List<String> by lazy { stocks.map { it.industry }.distinct().sorted() }
     val indexNames: List<String> by lazy { stocks.flatMap { it.data.indices }.distinct().sorted() }
+    val hasBse: Boolean by lazy { stocks.any { "BSE" in it.exchanges } }
 
     fun peers(stock: Stock, limit: Int = 10): List<Stock> =
         stocks.filter { it.industry == stock.industry && it.symbol != stock.symbol }

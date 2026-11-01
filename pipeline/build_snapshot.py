@@ -47,7 +47,10 @@ NSE_INDEX_LISTS = {
     "NIFTY 500": "https://archives.nseindia.com/content/indices/ind_nifty500list.csv",
     "NIFTY MICROCAP 250": "https://archives.nseindia.com/content/indices/ind_niftymicrocap250_list.csv",
 }
-BENCHMARKS = {"NIFTY 50": "^NSEI", "NIFTY BANK": "^NSEBANK", "NIFTY 500": "^CRSLDX"}
+BENCHMARKS = {"NIFTY 50": "^NSEI", "NIFTY BANK": "^NSEBANK", "NIFTY 500": "^CRSLDX", "SENSEX": "^BSESN", "BSE 500": "BSE-500.BO"}
+BSE_BHAVCOPY = "https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{date}_F_0000.CSV"
+# BSE groups that are company shares. Left out: F/E (mutual funds, ETFs), IF (REITs, InvITs), G, P and R.
+BSE_SERIES = {"A", "B", "T", "X", "XT", "M", "MT", "MS", "TS", "Z"}
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
     "Accept": "text/csv,application/octet-stream,*/*",
@@ -114,9 +117,65 @@ def load_universe(kind: str) -> tuple[dict[str, dict], dict[str, list[str]]]:
                 stocks[sym] = {"name": sym, "isin": None}
     for sym, info in stocks.items():
         info["niftyIndustry"] = nifty_industry.get(sym)
+        info["yahoo"] = sym + ".NS"
+        info["exchanges"] = ["NSE"]
     if not stocks:
         raise RuntimeError("Empty universe: NSE lists could not be read")
     return stocks, memberships
+
+
+def load_bse_bhavcopy(today: dt.date | None = None) -> list[dict]:
+    """Rows of BSE's most recent daily bhavcopy (every scrip that traded), looking back up to 10 days."""
+    import csv
+
+    day = today or dt.date.today()
+    for back in range(0, 11):
+        d = day - dt.timedelta(days=back)
+        if d.weekday() >= 5:
+            continue
+        try:
+            raw = http_get(BSE_BHAVCOPY.format(date=d.strftime("%Y%m%d")), tries=2)
+        except Exception:  # noqa: BLE001
+            continue
+        rows = list(csv.DictReader(io.StringIO(raw.decode("utf-8", "replace"))))
+        if rows and "ISIN" in rows[0]:
+            log.info("BSE bhavcopy for %s: %d rows", d, len(rows))
+            return rows
+    log.warning("No BSE bhavcopy found in the last 10 days; continuing with NSE only")
+    return []
+
+
+def merge_bse(stocks: dict[str, dict], rows: list[dict]) -> int:
+    """
+    Adds BSE to `stocks` in place. Companies on both exchanges (same ISIN) keep their NSE symbol and gain
+    "BSE" plus their BSE scrip code; companies only on BSE are added under their BSE symbol (with "-BSE"
+    appended if an unrelated NSE company already uses it), priced from Yahoo's `.BO` ticker.
+    Returns the number of BSE-only companies added.
+    """
+    by_isin = {info.get("isin"): sym for sym, info in stocks.items() if info.get("isin")}
+    added = 0
+    for r in rows:
+        isin = (r.get("ISIN") or "").strip()
+        sym = (r.get("TckrSymb") or "").strip()
+        code = (r.get("FinInstrmId") or "").strip()
+        if (r.get("FinInstrmTp") or "STK").strip() != "STK" or not isin.startswith("INE") or not sym:
+            continue
+        if (r.get("SctySrs") or "").strip() not in BSE_SERIES:
+            continue
+        if isin in by_isin:
+            info = stocks[by_isin[isin]]
+            if "BSE" not in info["exchanges"]:
+                info["exchanges"] = info["exchanges"] + ["BSE"]
+            info["bseCode"] = code
+            continue
+        key = sym if sym not in stocks else sym + "-BSE"
+        if key in stocks:
+            continue
+        stocks[key] = {"name": (r.get("FinInstrmNm") or sym).strip(), "isin": isin, "niftyIndustry": None,
+                       "yahoo": sym + ".BO", "exchanges": ["BSE"], "bseCode": code}
+        by_isin[isin] = key
+        added += 1
+    return added
 
 
 # ----------------------------------------------------------------------------- prices
@@ -326,7 +385,8 @@ def fetch_fundamentals(ticker: str) -> dict | None:
     return rec
 
 
-def refresh_fundamentals(symbols: list[str], cache: dict[str, dict], limit: int, budget_s: float) -> int:
+def refresh_fundamentals(symbols: list[str], cache: dict[str, dict], limit: int, budget_s: float,
+                         yahoo: dict[str, str] | None = None) -> int:
     """Re-fetches the `limit` stalest (or missing) entries within `budget_s` seconds."""
     order = sorted(symbols, key=lambda s: cache.get(s, {}).get("fetched", ""))
     started = time.time()
@@ -337,7 +397,7 @@ def refresh_fundamentals(symbols: list[str], cache: dict[str, dict], limit: int,
             break
         for attempt in range(3):
             try:
-                rec = fetch_fundamentals(sym + ".NS")
+                rec = fetch_fundamentals((yahoo or {}).get(sym, sym + ".NS"))
                 if rec:
                     cache[sym] = rec
                 done += 1
@@ -366,7 +426,7 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
 
     stocks = []
     for sym, base in sorted(universe.items()):
-        df = prices.get(sym + ".NS")
+        df = prices.get(base.get("yahoo", sym + ".NS"))
         if df is None:
             continue
         rec = price_record(df, daily_dates, weekly_dates)
@@ -380,6 +440,8 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
             "sector": fund.get("sector") or base.get("niftyIndustry"),
             "industry": fund.get("industry") or base.get("niftyIndustry"),
             "indices": memberships.get(sym, []),
+            "exchanges": base.get("exchanges", ["NSE"]),
+            "bseCode": base.get("bseCode"),
             "f": fund.get("f", {}),
             "fin": fund.get("fin", []),
             "holding": shareholding.summarize((holdings or {}).get(sym, {}).get("quarters", [])),
@@ -397,7 +459,7 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
         "version": 1,
         "asOf": daily_dates[-1].date().isoformat(),
         "generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "source": "NSE (listings, index constituents, shareholding filings); Yahoo Finance (prices, fundamentals)",
+        "source": "NSE (listings, index constituents, shareholding filings); BSE (listings); Yahoo Finance (prices, fundamentals)",
         "dailyDates": [epoch_day(d) for d in daily_dates],
         "weeklyDates": [epoch_day(d) for d in weekly_dates],
         "stocks": stocks,
@@ -429,19 +491,25 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--holding-budget-minutes", type=float, default=45)
     ap.add_argument("--universe", choices=["all", "nifty500"], default="all")
     ap.add_argument("--limit", type=int, default=0, help="only the first N symbols (testing)")
+    ap.add_argument("--no-bse", action="store_true", help="NSE only")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     universe, memberships = load_universe(args.universe)
+    if args.universe == "all" and not args.no_bse:
+        log.info("BSE-only companies added: %d", merge_bse(universe, load_bse_bhavcopy()))
     symbols = sorted(universe)
     if args.limit:
-        priority = sorted(symbols, key=lambda s: (0 if "NIFTY 50" in memberships.get(s, []) else 1, s))
+        # Nifty 50 first, then BSE-only companies, so a small test run covers both exchanges.
+        priority = sorted(symbols, key=lambda s: (0 if "NIFTY 50" in memberships.get(s, []) else
+                                                  1 if universe[s].get("exchanges") == ["BSE"] else 2, s))
         symbols = priority[: args.limit]
         universe = {s: universe[s] for s in symbols}
     log.info("universe: %d stocks", len(symbols))
 
     bench = {name: df for name, t in BENCHMARKS.items() for df in [fetch_prices([t]).get(t)] if df is not None}
-    prices = fetch_prices([s + ".NS" for s in symbols])
+    yahoo = {s: universe[s].get("yahoo", s + ".NS") for s in symbols}
+    prices = fetch_prices([yahoo[s] for s in symbols])
     log.info("prices for %d stocks", len(prices))
     if len(prices) < max(10, len(symbols) // 3):
         raise SystemExit(f"Too few prices downloaded ({len(prices)}); not publishing")
@@ -450,9 +518,9 @@ def main(argv: list[str] | None = None) -> int:
     if os.path.exists(args.cache):
         cache = read_gz_json(args.cache)
         log.info("fundamentals cache: %d entries", len(cache))
-    with_prices = [s for s in symbols if s + ".NS" in prices]
+    with_prices = [s for s in symbols if yahoo[s] in prices]
     missing = sum(1 for s in with_prices if s not in cache)
-    refresh_fundamentals(with_prices, cache, max(args.refresh, missing if missing < 3000 else args.refresh), args.budget_minutes * 60)
+    refresh_fundamentals(with_prices, cache, max(args.refresh, missing if missing < 3000 else args.refresh), args.budget_minutes * 60, yahoo)
     write_gz_json(args.cache, cache)
 
     holdings: dict[str, dict] = {}
@@ -461,8 +529,10 @@ def main(argv: list[str] | None = None) -> int:
         log.info("shareholding cache: %d entries", len(holdings))
     if args.holding_refresh > 0:
         try:
-            missing = sum(1 for s in with_prices if s not in holdings)
-            n = shareholding.refresh(with_prices, holdings, max(args.holding_refresh, min(missing, 3000)), args.holding_budget_minutes * 60)
+            # Shareholding filings come from NSE, so only companies listed there.
+            on_nse = [s for s in with_prices if "NSE" in universe[s].get("exchanges", ["NSE"])]
+            missing = sum(1 for s in on_nse if s not in holdings)
+            n = shareholding.refresh(on_nse, holdings, max(args.holding_refresh, min(missing, 3000)), args.holding_budget_minutes * 60)
             log.info("shareholding refreshed for %d companies", n)
         except Exception as e:  # noqa: BLE001
             log.warning("shareholding refresh failed: %s", e)

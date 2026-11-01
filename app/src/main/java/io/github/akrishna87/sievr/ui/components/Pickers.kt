@@ -93,7 +93,7 @@ fun StockSearch(market: Market, onDismiss: () -> Unit, title: String = "Find a s
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
             OutlinedTextField(
                 query, { query = it }, Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                placeholder = { Text("Symbol or company name") },
+                placeholder = { Text("Symbol, company name or BSE code") },
                 leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true,
             )
             LazyColumn {
@@ -113,7 +113,7 @@ fun search(market: Market, query: String, recent: List<String> = emptyList()): L
     }
     return market.stocks.mapNotNull { s ->
         val score = when {
-            s.symbol.equals(q, true) -> 0
+            s.symbol.equals(q, true) || s.data.bseCode == q -> 0
             s.symbol.startsWith(q, true) -> 1
             s.name.startsWith(q, true) -> 2
             s.name.split(' ').any { it.startsWith(q, true) } -> 3

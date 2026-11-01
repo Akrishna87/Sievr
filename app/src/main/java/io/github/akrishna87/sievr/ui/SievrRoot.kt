@@ -105,7 +105,7 @@ fun SievrRoot(pendingSymbol: MutableState<String?>) {
                 text = {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         Text(
-                            "Sievr is a free stock screener for NSE-listed companies. It works out every ratio, score and " +
+                            "Sievr is a free stock screener for companies listed on NSE and BSE. It works out every ratio, score and " +
                                 "screen on your phone from end-of-day market data that updates each weekday evening.\n\n" +
                                 "Sievr is a research tool, not investment advice. It is not registered with SEBI as an investment " +
                                 "adviser or research analyst. Data can be late, incomplete or wrong; check important figures with " +

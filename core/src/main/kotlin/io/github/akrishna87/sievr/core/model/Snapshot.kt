@@ -43,6 +43,10 @@ data class StockData(
     val industry: String? = null,
     /** Index memberships, e.g. "NIFTY 50", "NIFTY 500". */
     val indices: List<String> = emptyList(),
+    /** Exchanges the stock trades on, "NSE" and/or "BSE". Empty in older snapshots, which were NSE only. */
+    val exchanges: List<String> = emptyList(),
+    /** BSE scrip code, e.g. "500325". */
+    val bseCode: String? = null,
     /** Raw fundamentals from the data source; keys are [io.github.akrishna87.sievr.core.metrics.Raw] ids. */
     val f: Map<String, Double> = emptyMap(),
     /** Daily closes aligned to [Snapshot.dailyDates]; null on days without a trade. */

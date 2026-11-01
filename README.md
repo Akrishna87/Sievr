@@ -1,6 +1,6 @@
 # Sievr
 
-**A free stock screener for Indian markets (NSE), for Android.** No account, no paywall: the features other
+**A free stock screener for Indian markets (NSE and BSE), for Android.** No account, no paywall: the features other
 screeners charge for are calculated on the phone from one end-of-day data file that's rebuilt every weekday evening.
 
 **Download:** `Sievr.apk` from the [`app-latest` release](https://github.com/Akrishna87/Sievr/releases/tag/app-latest).
@@ -39,7 +39,8 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 
 ```
 pipeline/          Python, runs on GitHub Actions every weekday 19:15 IST
-  build_snapshot.py   NSE listings + index lists, Yahoo Finance prices and fundamentals
+  build_snapshot.py   NSE listings + index lists, BSE's daily bhavcopy (for BSE-only companies and BSE codes),
+                      Yahoo Finance prices and fundamentals
   shareholding.py     quarterly shareholding patterns from NSE's XBRL filings
                       → snapshot.json.gz on the data-latest release (~5–10 MB)
 core/              Plain Kotlin, no Android: the engine

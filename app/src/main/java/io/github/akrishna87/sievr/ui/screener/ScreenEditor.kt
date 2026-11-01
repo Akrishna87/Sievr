@@ -59,6 +59,7 @@ import io.github.akrishna87.sievr.core.formula.Formula
 import io.github.akrishna87.sievr.core.metrics.Metric
 import io.github.akrishna87.sievr.core.metrics.Metrics
 import io.github.akrishna87.sievr.core.model.Market
+import io.github.akrishna87.sievr.core.screen.ExchangeFilter
 import io.github.akrishna87.sievr.core.screen.Filter
 import io.github.akrishna87.sievr.core.screen.FormulaFilter
 import io.github.akrishna87.sievr.core.screen.IndexFilter
@@ -175,7 +176,7 @@ fun ScreenEditor() {
     }
 }
 
-private enum class Adding { METRIC, FORMULA, SECTOR, INDEX, PATTERN, COLUMNS, SORT }
+private enum class Adding { METRIC, FORMULA, SECTOR, INDEX, EXCHANGE, PATTERN, COLUMNS, SORT }
 
 @Composable
 private fun EditorBody(market: Market, screen: Screen, onChange: (Screen) -> Unit) {
@@ -218,6 +219,7 @@ private fun EditorBody(market: Market, screen: Screen, onChange: (Screen) -> Uni
                 AssistChip({ adding = Adding.FORMULA }, { Text("Formula") }, Modifier.padding(4.dp), leadingIcon = { Icon(Icons.Default.Add, null) })
                 AssistChip({ adding = Adding.SECTOR }, { Text("Sector") }, Modifier.padding(4.dp), leadingIcon = { Icon(Icons.Default.Add, null) })
                 AssistChip({ adding = Adding.INDEX }, { Text("Index") }, Modifier.padding(4.dp), leadingIcon = { Icon(Icons.Default.Add, null) })
+                if (market.hasBse) AssistChip({ adding = Adding.EXCHANGE }, { Text("Exchange") }, Modifier.padding(4.dp), leadingIcon = { Icon(Icons.Default.Add, null) })
                 AssistChip({ adding = Adding.PATTERN }, { Text("Candlestick") }, Modifier.padding(4.dp), leadingIcon = { Icon(Icons.Default.Add, null) })
             }
         }
@@ -260,6 +262,7 @@ private fun EditorBody(market: Market, screen: Screen, onChange: (Screen) -> Uni
         is IndexFilter -> ChoiceDialog("Indices", market.indexNames, editingFilter.indices, { editing = null }) { replace(editing, IndexFilter(it)); editing = null }
         is IndustryFilter -> ChoiceDialog("Industries", market.industries, editingFilter.industries, { editing = null }) { replace(editing, IndustryFilter(it)); editing = null }
         is PatternFilter -> PatternDialog(editingFilter.patterns, { editing = null }) { replace(editing, PatternFilter(it)); editing = null }
+        is ExchangeFilter -> ExchangeDialog({ editing = null }) { replace(editing, it); editing = null }
         null -> Unit
     }
 
@@ -269,6 +272,7 @@ private fun EditorBody(market: Market, screen: Screen, onChange: (Screen) -> Uni
         Adding.SECTOR -> ChoiceDialog("Sectors", market.sectors, emptySet(), { adding = null }) { replace(null, SectorFilter(it)); adding = null }
         Adding.INDEX -> ChoiceDialog("Indices", market.indexNames, emptySet(), { adding = null }) { replace(null, IndexFilter(it)); adding = null }
         Adding.PATTERN -> PatternDialog(emptySet(), { adding = null }) { replace(null, PatternFilter(it)); adding = null }
+        Adding.EXCHANGE -> ExchangeDialog({ adding = null }) { replace(null, it); adding = null }
         Adding.COLUMNS -> MetricPicker("Add a column", onDismiss = { adding = null }, exclude = columns.toSet(), includePatterns = false) {
             onChange(screen.copy(columns = screen.columns + it.id)); adding = null
         }
@@ -426,6 +430,24 @@ private fun PatternDialog(initial: Set<String>, onDismiss: () -> Unit, onSave: (
             }
         },
         confirmButton = { TextButton(enabled = chosen.isNotEmpty(), onClick = { onSave(chosen) }) { Text("Done") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun ExchangeDialog(onDismiss: () -> Unit, onSave: (ExchangeFilter) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Exchange") },
+        text = {
+            Column {
+                listOf("NSE" to "Listed on NSE", "BSE" to "Listed on BSE", "BSE_ONLY" to "Only on BSE (not on NSE)").forEach { (id, label) ->
+                    Text(label, Modifier.fillMaxWidth().clickable { onSave(ExchangeFilter(id)) }.padding(vertical = 12.dp))
+                    HorizontalDivider()
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

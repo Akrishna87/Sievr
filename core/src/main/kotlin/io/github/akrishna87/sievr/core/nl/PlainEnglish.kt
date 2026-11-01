@@ -1,6 +1,7 @@
 package io.github.akrishna87.sievr.core.nl
 
 import io.github.akrishna87.sievr.core.metrics.Metrics
+import io.github.akrishna87.sievr.core.screen.ExchangeFilter
 import io.github.akrishna87.sievr.core.screen.Filter
 import io.github.akrishna87.sievr.core.screen.FormulaFilter
 import io.github.akrishna87.sievr.core.screen.IndexFilter
@@ -132,6 +133,12 @@ object PlainEnglish {
         "bearish engulfing" to PatternFilter(setOf(CandlePattern.BEARISH_ENGULFING.metricId)),
         "doji" to PatternFilter(setOf(CandlePattern.DOJI.metricId)),
         "piotroski" to f("piotroski", Op.GTE, 7.0),
+        "bse only" to ExchangeFilter("BSE_ONLY"),
+        "only on bse" to ExchangeFilter("BSE_ONLY"),
+        "bse listed" to ExchangeFilter("BSE"),
+        "on bse" to ExchangeFilter("BSE"),
+        "nse listed" to ExchangeFilter("NSE"),
+        "on nse" to ExchangeFilter("NSE"),
         "nifty 50" to IndexFilter(setOf("NIFTY 50")),
         "nifty50" to IndexFilter(setOf("NIFTY 50")),
         "nifty next 50" to IndexFilter(setOf("NIFTY NEXT 50")),

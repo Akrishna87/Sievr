@@ -203,3 +203,25 @@ class ShareholdingTest {
         assertEquals(4.2, snap.stocks.single().holding!!.mf)
     }
 }
+
+class ExchangeTest {
+    @Test fun exchangesFilterAndParse() {
+        val base = TestData.snapshot()
+        val snap = base.copy(stocks = base.stocks.mapIndexed { i, s ->
+            when (i) {
+                0 -> s.copy(exchanges = listOf("NSE", "BSE"), bseCode = "500001")
+                1 -> s.copy(exchanges = listOf("BSE"), bseCode = "500002")
+                else -> s // older snapshots: no exchanges field means NSE
+            }
+        })
+        val market = Enricher.enrich(snap)
+        assertTrue(market.hasBse)
+        fun hits(f: io.github.akrishna87.sievr.core.screen.Filter) = market.stocks.filter { f.matches(it) }.map { it.symbol }.sorted()
+        assertEquals(listOf("CHEAP"), hits(io.github.akrishna87.sievr.core.screen.ExchangeFilter("BSE_ONLY")))
+        assertEquals(listOf("CHEAP", "GOOD"), hits(io.github.akrishna87.sievr.core.screen.ExchangeFilter("BSE")))
+        assertEquals(listOf("DEBT", "GOOD", "MID"), hits(io.github.akrishna87.sievr.core.screen.ExchangeFilter("NSE")))
+        val r = PlainEnglish.parse("debt free companies only on bse")
+        assertTrue(r.filters.contains(io.github.akrishna87.sievr.core.screen.ExchangeFilter("BSE_ONLY")), "${r.filters}")
+        assertTrue(r.ignored.isEmpty(), "ignored ${r.ignored}")
+    }
+}

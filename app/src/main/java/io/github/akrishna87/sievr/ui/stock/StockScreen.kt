@@ -144,6 +144,7 @@ private fun Header(stock: Stock) {
             Pill(stock.sector)
             if (stock.industry != stock.sector) Pill(stock.industry)
             Pill(Fmt.capCategory(stock["capCategory"]))
+            Pill(stock.exchanges.joinToString(" · ") + (stock.data.bseCode?.let { " $it" } ?: ""))
             stock.data.indices.filter { it == "NIFTY 50" || it == "NIFTY NEXT 50" }.forEach { Pill(it) }
         }
     }

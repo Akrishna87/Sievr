@@ -72,3 +72,28 @@ def test_shareholding_parse_and_summary():
     s = sh.summarize([prev, q])
     assert s["promoter"] == 66.03 and s["promoterChange"] == 1.03 and s["fiiChange"] == -1.05 and s["asOf"] == "2026-09-30"
     assert sh.summarize([]) is None
+
+
+def test_merge_bse():
+    stocks = {"RELIANCE": {"name": "Reliance", "isin": "INE002A01018", "yahoo": "RELIANCE.NS", "exchanges": ["NSE"]},
+              "ABC": {"name": "Abc NSE", "isin": "INE000X00001", "yahoo": "ABC.NS", "exchanges": ["NSE"]}}
+    rows = [
+        {"FinInstrmTp": "STK", "ISIN": "INE002A01018", "TckrSymb": "RELIANCE", "FinInstrmId": "500325", "SctySrs": "A", "FinInstrmNm": "RELIANCE"},
+        {"FinInstrmTp": "STK", "ISIN": "INE721I01024", "TckrSymb": "NSE", "FinInstrmId": "544937", "SctySrs": "A", "FinInstrmNm": "National Stock Exchange"},
+        {"FinInstrmTp": "STK", "ISIN": "INE999Z00009", "TckrSymb": "ABC", "FinInstrmId": "512345", "SctySrs": "X", "FinInstrmNm": "Another Abc"},
+        {"FinInstrmTp": "STK", "ISIN": "INF732E01037", "TckrSymb": "LIQUIDBEES", "FinInstrmId": "590096", "SctySrs": "F", "FinInstrmNm": "ETF"},
+        {"FinInstrmTp": "STK", "ISIN": "INE0FDU25010", "TckrSymb": "BIRET", "FinInstrmId": "543261", "SctySrs": "IF", "FinInstrmNm": "REIT"},
+    ]
+    assert b.merge_bse(stocks, rows) == 2
+    assert stocks["RELIANCE"]["exchanges"] == ["NSE", "BSE"] and stocks["RELIANCE"]["bseCode"] == "500325"
+    assert stocks["NSE"]["yahoo"] == "NSE.BO" and stocks["NSE"]["exchanges"] == ["BSE"]
+    assert stocks["ABC-BSE"]["yahoo"] == "ABC.BO" and stocks["ABC"]["exchanges"] == ["NSE"]
+    assert "LIQUIDBEES" not in stocks and "BIRET" not in stocks
+
+
+def test_build_carries_exchanges():
+    nifty = frame(1600, 20000)
+    snap = b.build({"X": {"name": "X", "yahoo": "X.BO", "exchanges": ["BSE"], "bseCode": "500001"}}, {},
+                   {"X.BO": frame(1600, 100)}, {"NIFTY 50": nifty}, {})
+    (s,) = snap["stocks"]
+    assert s["exchanges"] == ["BSE"] and s["bseCode"] == "500001"

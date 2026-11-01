@@ -96,6 +96,21 @@ data class IndexFilter(val indices: Set<String>) : Filter {
     override fun describe() = "In " + indices.sorted().joinToString(" or ")
 }
 
+/** Where the stock is listed: "NSE", "BSE" (listed on BSE, whatever else), or "BSE_ONLY". */
+@Serializable
+@SerialName("exchange")
+data class ExchangeFilter(val exchange: String) : Filter {
+    override fun matches(stock: Stock): Boolean = when (exchange) {
+        "BSE_ONLY" -> stock.bseOnly
+        else -> exchange in stock.exchanges
+    }
+    override fun metricIds() = emptySet<String>()
+    override fun describe() = when (exchange) {
+        "BSE_ONLY" -> "Only on BSE"
+        else -> "Listed on $exchange"
+    }
+}
+
 /** Any of the chosen candlestick patterns on the last bar. */
 @Serializable
 @SerialName("pattern")

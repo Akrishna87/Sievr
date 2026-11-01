@@ -58,7 +58,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Check the snapshot loads in the app's engine
         run: ./gradlew --no-daemon -q :core:checkSnapshot -Psnapshot=$PWD/pipeline/out/snapshot.json.gz -PminStocks=${{ (inputs.limit && inputs.limit != '0') && '10' || '300' }}
+      # Test runs (a stock limit) keep their result as a run artifact instead of replacing the app's data.
+      - name: Keep a test run's snapshot
+        if: inputs.limit && inputs.limit != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-snapshot
+          path: pipeline/out
       - name: Publish to the "data-latest" release
+        if: ${{ !inputs.limit || inputs.limit == '0' }}
         run: |
           if ! gh release view data-latest >/dev/null 2>&1; then
             gh release create data-latest --prerelease --title "Market data" \
