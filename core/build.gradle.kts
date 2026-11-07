@@ -20,6 +20,8 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+    // Desktop PDFBox (what pdfbox-android is ported from), to test reading a real password-protected PDF.
+    testImplementation("org.apache.pdfbox:pdfbox:2.0.32")
 }
 
 tasks.test {
