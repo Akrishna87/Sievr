@@ -1,0 +1,35 @@
+name: Mutual fund NAVs
+
+# AMFI publishes the day's NAVs by about 11 pm IST; this runs at 00:30 IST after each business day.
+on:
+  schedule:
+    - cron: "0 19 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mf-navs
+  cancel-in-progress: false
+
+jobs:
+  navs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests
+      - name: Previous NAVs (for the day's change)
+        run: gh release download data-latest -p mf.json.gz -D pipeline/previous || echo "No previous NAV file yet."
+      - name: Build mf.json.gz from AMFI
+        working-directory: pipeline
+        run: python build_mf.py --out out/mf.json.gz --previous previous/mf.json.gz
+      - name: Publish (replaces the previous file)
+        run: gh release upload data-latest pipeline/out/mf.json.gz --clobber
