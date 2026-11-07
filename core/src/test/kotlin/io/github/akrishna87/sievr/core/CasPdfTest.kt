@@ -76,4 +76,23 @@ class CasPdfTest {
         assertEquals(1500.0, h.units, 1e-6)
         assertEquals(75000.0, h.invested, 1e-6)
     }
+
+    @Test fun sharesFromDematStatementPdf() {
+        val market = io.github.akrishna87.sievr.core.metrics.Enricher.enrich(TestData.snapshot().let { snap ->
+            snap.copy(stocks = snap.stocks.mapIndexed { i, st -> st.copy(isin = listOf("INE002A01018", "INE009A01021", "INE467B01029", "INE040A01034")[i]) })
+        })
+        val cells = listOf(0f, 70f, 230f, 270f, 310f, 350f, 400f, 460f)
+        val shares = listOf("INE002A01018", "GOOD CO LIMITED.EQ", "50", "0", "0", "50", "2,500.75", "1,25,037.50")
+        val fund = listOf("INF846K01DP8", "AXIS LARGE CAP FUND - DIRECT GROWTH", "9101112", "1,500.000", "50.0000", "75,000.00", "62.4100", "93,615.00")
+        val pdf = statementPdf("ABCDE1234F01011980",
+            listOf(0f to "Equities (E)") + cells.zip(shares) + listOf(0f to "Mutual Fund Folios (F)") + cells.zip(fund))
+        val text = text(pdf, "ABCDE1234F01011980")
+        val r = io.github.akrishna87.sievr.core.portfolio.ShareStatement.parse(text, market)
+        val h = r.holdings.single()
+        assertEquals("GOOD", h.symbol)
+        assertEquals(50.0, h.quantity, 1e-9)
+        assertEquals(2500.75, h.averageCost, 1e-6)
+        // The same PDF's fund row is still read by the fund import.
+        assertEquals(1500.0, CasParser.parse(text, schemes).holdings.single().units, 1e-6)
+    }
 }
