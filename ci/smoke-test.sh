@@ -34,6 +34,8 @@ shot 02-market 2
 for tab in Screens Watchlist Portfolio More; do
   tap "$tab" && shot "03-$(echo $tab | tr A-Z a-z)" 3
 done
+tap Portfolio; sleep 2; tap "Mutual funds" && sleep 8 && tap "Add fund" && sleep 2 && adb shell input text "parag%sflexi%sdirect" && shot 03-mutual-funds 4
+adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1
 tap Screens; sleep 2; tap "Magic Formula" && shot 04-magic-formula 4
 tap "Back"; sleep 1; tap Market; sleep 2
 tap "Search stocks" && sleep 2 && adb shell input text "RELIANCE" && sleep 2 && tap "RELIANCE" 2 && shot 05-stock 4
