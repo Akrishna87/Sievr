@@ -96,7 +96,8 @@ fun MutualFundsTab(view: String, members: List<Member>, target: String, withOwne
             when (val o = io.github.akrishna87.sievr.data.CasReader.read(context, uri, password)) {
                 is io.github.akrishna87.sievr.data.CasReader.Outcome.Read -> {
                     pdf = null
-                    val result = io.github.akrishna87.sievr.core.mf.CasParser.parse(o.text, schemes)
+                    val result = io.github.akrishna87.sievr.core.mf.CasParser.parse(o.text, schemes,
+                        app.market.market?.stocks?.filter { it.isEtf }?.mapNotNull { it.data.isin }?.toSet() ?: emptySet())
                     if (result.holdings.isEmpty() && result.unmatched.isEmpty()) {
                         importMessage = "No mutual fund holdings were found in that PDF. Use a Consolidated Account Statement (CAS) " +
                             "from CAMS, KFintech, MF Central, NSDL or CDSL — see \"How do I get my statement?\""
@@ -296,6 +297,11 @@ private fun CasResultDialog(r: io.github.akrishna87.sievr.core.mf.CasParser.Resu
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (r.holdings.size > 12) Text("…and ${r.holdings.size - 12} more", style = MaterialTheme.typography.bodySmall)
+                if (r.etfsSkipped > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("${r.etfsSkipped} ETF(s) left out here: ETFs are tracked under Stocks. Import the same statement there to add them.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                }
                 if (r.missingCost > 0) {
                     Spacer(Modifier.height(8.dp))
                     Text("${r.missingCost} fund(s) had no cost on the statement, so the current value is used as the amount invested. You can edit them afterwards.",

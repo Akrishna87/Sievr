@@ -39,6 +39,7 @@ import shareholding
 log = logging.getLogger("sievr")
 
 NSE_EQUITY_LIST = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+NSE_ETF_LIST = "https://archives.nseindia.com/content/equities/eq_etfseclist.csv"
 NSE_INDEX_LISTS = {
     "NIFTY 50": "https://archives.nseindia.com/content/indices/ind_nifty50list.csv",
     "NIFTY NEXT 50": "https://archives.nseindia.com/content/indices/ind_niftynext50list.csv",
@@ -116,6 +117,11 @@ def load_universe(kind: str) -> tuple[dict[str, dict], dict[str, list[str]]]:
         for sym in memberships:
             if "NIFTY 500" in memberships[sym]:
                 stocks[sym] = {"name": sym, "isin": None}
+    if kind == "all":
+        try:
+            log.info("ETFs added: %d", add_etfs(stocks, read_csv_url(NSE_ETF_LIST)))
+        except Exception as e:  # noqa: BLE001
+            log.warning("ETF list unavailable: %s", e)
     for sym, info in stocks.items():
         info["niftyIndustry"] = nifty_industry.get(sym)
         info["yahoo"] = sym + ".NS"
@@ -123,6 +129,48 @@ def load_universe(kind: str) -> tuple[dict[str, dict], dict[str, list[str]]]:
     if not stocks:
         raise RuntimeError("Empty universe: NSE lists could not be read")
     return stocks, memberships
+
+
+def _col(df: pd.DataFrame, *words: str) -> str | None:
+    """The first column whose name (case and spaces ignored) contains any of `words`."""
+    for c in df.columns:
+        key = c.lower().replace(" ", "")
+        if any(w in key for w in words):
+            return c
+    return None
+
+
+def add_etfs(stocks: dict[str, dict], df: pd.DataFrame) -> int:
+    """Adds NSE's exchange traded funds to `stocks` (prices only: ETFs have no company fundamentals)."""
+    sym_c, isin_c = _col(df, "symbol"), _col(df, "isin")
+    name_c, under_c = _col(df, "securityname", "name"), _col(df, "underlying")
+    if not sym_c:
+        raise RuntimeError(f"unexpected ETF list columns: {list(df.columns)}")
+    added = 0
+    for _, row in df.iterrows():
+        sym = str(row[sym_c]).strip()
+        if not sym or sym == "nan" or sym in stocks:
+            continue
+        under = str(row[under_c]).strip() if under_c and isinstance(row[under_c], str) else ""
+        name = str(row[name_c]).strip() if name_c and isinstance(row[name_c], str) else sym
+        isin = str(row[isin_c]).strip() if isin_c and isinstance(row[isin_c], str) else None
+        stocks[sym] = {"name": name, "isin": isin or None, "type": "ETF", "sector": "ETF", "industry": etf_kind(under, name)}
+        added += 1
+    return added
+
+
+def etf_kind(underlying: str, name: str) -> str:
+    """A short grouping for an ETF from what it tracks: Gold, Silver, Nifty 50, Bank, Liquid…"""
+    t = f"{underlying} {name}".lower()
+    for words, kind in [(("gold",), "Gold"), (("silver",), "Silver"), (("liquid", "overnight", "money market"), "Liquid"),
+                        (("gilt", "bond", "g-sec", "gsec", "sdl", "psu bond", "bharat bond", "debt"), "Debt"),
+                        (("nasdaq", "s&p 500", "hang seng", "us ", "global", "international", "fang", "nyse"), "International"),
+                        (("bank",), "Banking"), (("it ", "information tech", "technology"), "IT"),
+                        (("next 50", "junior"), "Nifty Next 50"), (("midcap", "mid cap"), "Midcap"), (("smallcap", "small cap"), "Smallcap"),
+                        (("sensex",), "Sensex"), (("nifty 50", "nifty50", "nifty bees", "niftybees"), "Nifty 50")]:
+        if any(w in t for w in words):
+            return kind
+    return "Other ETF"
 
 
 def load_bse_bhavcopy(today: dt.date | None = None) -> list[dict]:
@@ -159,6 +207,12 @@ def merge_bse(stocks: dict[str, dict], rows: list[dict]) -> int:
         isin = (r.get("ISIN") or "").strip()
         sym = (r.get("TckrSymb") or "").strip()
         code = (r.get("FinInstrmId") or "").strip()
+        if isin.startswith("INF") and isin in by_isin:   # an NSE ETF also traded on BSE
+            info = stocks[by_isin[isin]]
+            if "BSE" not in info["exchanges"]:
+                info["exchanges"] = info["exchanges"] + ["BSE"]
+            info["bseCode"] = code
+            continue
         if (r.get("FinInstrmTp") or "STK").strip() != "STK" or not isin.startswith("INE") or not sym:
             continue
         if (r.get("SctySrs") or "").strip() not in BSE_SERIES:
@@ -438,8 +492,9 @@ def build(universe: dict[str, dict], memberships: dict[str, list[str]], prices: 
             "symbol": sym,
             "name": names.clean(fund.get("name") or base["name"], base.get("isin")),
             "isin": base.get("isin"),
-            "sector": fund.get("sector") or base.get("niftyIndustry"),
-            "industry": fund.get("industry") or base.get("niftyIndustry"),
+            "type": base.get("type"),
+            "sector": base.get("sector") or fund.get("sector") or base.get("niftyIndustry"),
+            "industry": base.get("industry") or fund.get("industry") or base.get("niftyIndustry"),
             "indices": memberships.get(sym, []),
             "exchanges": base.get("exchanges", ["NSE"]),
             "bseCode": base.get("bseCode"),
@@ -503,7 +558,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit:
         # Nifty 50 first, then BSE-only companies, so a small test run covers both exchanges.
         priority = sorted(symbols, key=lambda s: (0 if "NIFTY 50" in memberships.get(s, []) else
-                                                  1 if universe[s].get("exchanges") == ["BSE"] else 2, s))
+                                                  1 if universe[s].get("exchanges") == ["BSE"] or universe[s].get("type") == "ETF" else 2, s))
         symbols = priority[: args.limit]
         universe = {s: universe[s] for s in symbols}
     log.info("universe: %d stocks", len(symbols))
@@ -520,6 +575,9 @@ def main(argv: list[str] | None = None) -> int:
         cache = read_gz_json(args.cache)
         log.info("fundamentals cache: %d entries", len(cache))
     with_prices = [s for s in symbols if yahoo[s] in prices]
+    etfs = {s for s in with_prices if universe[s].get("type") == "ETF"}
+    log.info("ETFs with prices: %d", len(etfs))
+    with_prices = [s for s in with_prices if s not in etfs]   # no fundamentals or shareholding for ETFs
     missing = sum(1 for s in with_prices if s not in cache)
     refresh_fundamentals(with_prices, cache, max(args.refresh, missing if missing < 3000 else args.refresh), args.budget_minutes * 60, yahoo)
     write_gz_json(args.cache, cache)

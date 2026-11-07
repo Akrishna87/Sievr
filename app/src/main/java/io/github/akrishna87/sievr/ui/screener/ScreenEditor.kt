@@ -308,7 +308,7 @@ fun MetricFilterDialog(metric: Metric, initial: MetricFilter?, market: Market, o
     val b = v2.replace(",", "").toDoubleOrNull()
     val valid = a != null && (op != Op.BETWEEN || b != null)
     val preview = if (valid) MetricFilter(metric.id, op, a!!, if (op == Op.BETWEEN) b else null) else null
-    val count = preview?.let { f -> market.stocks.count { f.matches(it) } }
+    val count = preview?.let { f -> market.stocks.count { !it.isEtf && f.matches(it) } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(metric.label) },
@@ -353,7 +353,7 @@ fun FormulaDialog(initial: String, market: Market, onDismiss: () -> Unit, onSave
     var text by remember { mutableStateOf(initial) }
     val parsed = remember(text) { if (text.isBlank()) null else Formula.check(text) }
     val error = parsed?.exceptionOrNull()
-    val count = remember(parsed, market) { parsed?.getOrNull()?.let { f -> market.stocks.count { s -> f.matches { s[it] } } } }
+    val count = remember(parsed, market) { parsed?.getOrNull()?.let { f -> market.stocks.count { s -> !s.isEtf && f.matches { s[it] } } } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Formula") },

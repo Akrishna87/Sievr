@@ -31,7 +31,7 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 
 **Tracking**
 - Multiple watchlists with custom columns
-- Portfolio X-ray: import your NSDL/CDSL demat statement PDF (all demat accounts at once) or a broker CSV (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
+- Portfolio X-ray: shares and ETFs; import your NSDL/CDSL demat statement PDF (all demat accounts at once) or a broker report (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
   expected dividends, concentration and red flags (pledges, distress, over-concentration)
 - Mutual funds: import your CAS statement PDF (CAMS, KFintech, MF Central, NSDL or CDSL; read on the phone, never
   uploaded) or add funds by name (a holdings CSV works too) with units and amount invested; values refresh with AMFI's
@@ -47,7 +47,7 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 ```
 pipeline/          Python, runs on GitHub Actions every weekday 19:15 IST
   build_mf.py         mutual fund NAVs from AMFI (nightly, own workflow)
-  build_snapshot.py   NSE listings + index lists, BSE's daily bhavcopy (for BSE-only companies and BSE codes),
+  build_snapshot.py   NSE listings (shares and ETFs) + index lists, BSE's daily bhavcopy (for BSE-only companies and BSE codes),
                       Yahoo Finance prices and fundamentals
   shareholding.py     quarterly shareholding patterns from NSE's XBRL filings
                       → snapshot.json.gz on the data-latest release (~5–10 MB)

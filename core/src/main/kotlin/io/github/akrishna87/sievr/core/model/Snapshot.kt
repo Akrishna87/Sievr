@@ -41,6 +41,8 @@ data class StockData(
     val isin: String? = null,
     val sector: String? = null,
     val industry: String? = null,
+    /** "ETF" for exchange traded funds; null for company shares. */
+    val type: String? = null,
     /** Index memberships, e.g. "NIFTY 50", "NIFTY 500". */
     val indices: List<String> = emptyList(),
     /** Exchanges the stock trades on, "NSE" and/or "BSE". Empty in older snapshots, which were NSE only. */

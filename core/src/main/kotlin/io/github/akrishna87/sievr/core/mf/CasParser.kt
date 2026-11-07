@@ -35,10 +35,18 @@ object CasParser {
         /** Number of holdings where the statement had no cost, so the current value was used. */
         val missingCost: Int,
         val statementValue: Double,
+        /** ETFs found and left for the Stocks tab. */
+        val etfsSkipped: Int = 0,
     )
 
-    /** Fund units (ISINs starting INF) or company shares (INE). */
-    enum class Kind(val prefix: String) { FUNDS("INF"), SHARES("INE") }
+    private fun looksLikeEtf(isin: String, name: String, schemes: List<MfScheme>): Boolean {
+        val s = schemes.firstOrNull { isin in it.isin }
+        val text = ((s?.category ?: "") + " " + (s?.name ?: name)).lowercase()
+        return "exchange traded" in text || Regex("""\betf\b""").containsMatchIn(text) || "bees" in text
+    }
+
+    /** Fund units (ISINs starting INF), company shares (INE), or fund units held in demat as ETFs (INF, whole units). */
+    enum class Kind(val prefix: String) { FUNDS("INF"), SHARES("INE"), ETFS("INF") }
 
     /** Any Indian ISIN: a holding's block ends at the next one, whether it's a fund or a share. */
     private val isinRegex = Regex("""\bIN[EF][0-9A-Z]{9}\b""")
@@ -47,8 +55,12 @@ object CasParser {
     // "31-Oct-2026", "06/11/2026" or "31 Oct 2026"; never "0 0 2500" from a row of numbers.
     private val dateRegex = Regex("""\b\d{1,2}([-/])(?:[A-Za-z]{3}|\d{1,2})\1\d{2,4}\b(?!\.\d)|\b\d{1,2} [A-Za-z]{3} \d{4}\b""")
 
-    fun parse(text: String, schemes: List<MfScheme>): Result {
-        val entries = entries(text)
+    /** [etfIsins]: ETFs are tracked under Stocks, so they're left out here (and counted in [Result.etfsSkipped]). */
+    fun parse(text: String, schemes: List<MfScheme>, etfIsins: Set<String> = emptySet()): Result {
+        fun isEtf(e: Entry) = e.isin in etfIsins || looksLikeEtf(e.isin, e.name, schemes)
+        val entries = entries(text).filterNot { isEtf(it) }
+        // ETF rows in a demat table are whole units, so look for them that way too when counting.
+        val etfs = (entries(text) + entries(text, Kind.ETFS)).filter { isEtf(it) }.map { it.isin }.toSet()
         val byIsin = schemes.flatMap { s -> s.isin.map { it to s } }.toMap()
         val holdings = LinkedHashMap<Int, MfHolding>()
         val unmatched = mutableListOf<Entry>()
@@ -64,7 +76,7 @@ object CasParser {
             val prev = holdings[scheme.code]
             holdings[scheme.code] = MfHolding(scheme.code, (prev?.units ?: 0.0) + e.units, (prev?.invested ?: 0.0) + cost, scheme.name)
         }
-        return Result(holdings.values.toList(), unmatched, missingCost, entries.sumOf { it.value ?: 0.0 })
+        return Result(holdings.values.toList(), unmatched, missingCost, entries.sumOf { it.value ?: 0.0 }, etfs.size)
     }
 
     /** Every fund (or share) block in the statement with positive units. */
@@ -80,7 +92,7 @@ object CasParser {
             val block = clean.substring(hit.range.first, end)
             val before = clean.substring(lineStart, hit.range.first)
             val name = schemeName(before, block)
-            val entry = labelled(hit.value, name, block) ?: rowEntry(hit.value, name, before, block, wholeNumbers = kind == Kind.SHARES)
+            val entry = labelled(hit.value, name, block) ?: rowEntry(hit.value, name, before, block, wholeNumbers = kind != Kind.FUNDS)
             if (entry != null && entry.units > 0) out += entry
         }
         return out

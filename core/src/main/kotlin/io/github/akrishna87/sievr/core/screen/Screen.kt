@@ -145,12 +145,12 @@ data class Screen(
 
 object ScreenEngine {
     fun run(screen: Screen, stocks: List<Stock>): List<Stock> {
-        val matched = stocks.filter { s -> screen.filters.all { it.matches(s) } }
+        val matched = stocks.filter { s -> !s.isEtf && screen.filters.all { it.matches(s) } }
         val sorted = sort(matched, screen.sortBy, screen.sortDescending)
         return if (screen.limit > 0) sorted.take(screen.limit) else sorted
     }
 
-    fun count(filters: List<Filter>, stocks: List<Stock>): Int = stocks.count { s -> filters.all { it.matches(s) } }
+    fun count(filters: List<Filter>, stocks: List<Stock>): Int = stocks.count { s -> !s.isEtf && filters.all { it.matches(s) } }
 
     /** Sorts with missing values always last. */
     fun sort(stocks: List<Stock>, metric: String, descending: Boolean): List<Stock> {

@@ -15,6 +15,8 @@ class Stock(
     val exchanges: List<String> get() = data.exchanges.ifEmpty { listOf("NSE") }
     /** True for companies listed on BSE but not NSE. */
     val bseOnly: Boolean get() = "NSE" !in exchanges
+    /** Exchange traded funds: held and tracked like shares, but left out of company screens. */
+    val isEtf: Boolean get() = data.type == "ETF"
 
     operator fun get(metricId: String): Double? = metrics[metricId]
 
