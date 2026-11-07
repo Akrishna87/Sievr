@@ -97,6 +97,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Could not download AMFI NAVs")
     schemes = parse_navall(text)
     if len(schemes) < 2000:
+        log.error("Unexpected AMFI file (%d bytes, %s). It starts:\n%s", len(text), r.headers.get("content-type"),
+                  "\n".join(repr(l) for l in text.splitlines()[:25]))
         raise SystemExit(f"Only {len(schemes)} schemes parsed; not publishing")
     if os.path.exists(args.previous):
         with gzip.open(args.previous, "rb") as f:
