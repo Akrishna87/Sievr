@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -75,8 +76,36 @@ fun MutualFundsTab() {
     var editing by remember { mutableStateOf<Pair<MfScheme?, MfHolding?>?>(null) }
     var importResult by remember { mutableStateOf<MutualFunds.Import?>(null) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    var pdf by remember { mutableStateOf<android.net.Uri?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var reading by remember { mutableStateOf(false) }
+    var casResult by remember { mutableStateOf<io.github.akrishna87.sievr.core.mf.CasParser.Result?>(null) }
+    var howTo by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { app.mf.start() }
+
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) { pdf = uri; passwordError = null }
+    }
+    fun readPdf(password: String) {
+        val uri = pdf ?: return
+        val schemes = mf.data?.schemes ?: return
+        reading = true
+        scope.launch {
+            when (val o = io.github.akrishna87.sievr.data.CasReader.read(context, uri, password, schemes)) {
+                is io.github.akrishna87.sievr.data.CasReader.Outcome.Read -> {
+                    pdf = null
+                    if (o.result.holdings.isEmpty() && o.result.unmatched.isEmpty()) {
+                        importMessage = "No mutual fund holdings were found in that PDF. Use a Consolidated Account Statement (CAS) " +
+                            "from CAMS, KFintech, MF Central, NSDL or CDSL — see \"How do I get my statement?\""
+                    } else casResult = o.result
+                }
+                io.github.akrishna87.sievr.data.CasReader.Outcome.WrongPassword -> passwordError = "That password didn't open it. Try again."
+                is io.github.akrishna87.sievr.data.CasReader.Outcome.Failed -> { pdf = null; importMessage = o.message }
+            }
+            reading = false
+        }
+    }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -123,14 +152,14 @@ fun MutualFundsTab() {
             item {
                 EmptyState(
                     "Track your mutual funds",
-                    "Add each fund with its units and the amount you invested, or import a holdings CSV. Values update with the latest NAV " +
-                        "every business day. Everything stays on this phone.",
+                    "Import your mutual fund statement (CAS PDF) to bring in every fund at once, or add funds one by one. Values update " +
+                        "with the latest NAV every business day. Your statement is read on this phone and never uploaded.",
                 )
             }
-            item { Actions(onAdd = { searching = true }, onImport = { importer.launch("*/*") }) }
+            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("application/pdf") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
         } else {
             item { Summary(report) }
-            item { Actions(onAdd = { searching = true }, onImport = { importer.launch("*/*") }) }
+            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("application/pdf") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
             item { SectionHeader("Funds (${report.positions.size})") }
             items(report.positions, key = { it.holding.code }) { p ->
                 FundRow(p) { editing = p.scheme to p.holding }
@@ -164,6 +193,13 @@ fun MutualFundsTab() {
         AlertDialog(onDismissRequest = { importMessage = null }, title = { Text("Import") }, text = { Text(it) },
             confirmButton = { TextButton(onClick = { importMessage = null }) { Text("OK") } })
     }
+    if (pdf != null) PasswordDialog(passwordError, reading, onDismiss = { pdf = null; passwordError = null }) { readPdf(it) }
+    casResult?.let { r ->
+        CasResultDialog(r, onDismiss = { casResult = null }) { replace ->
+            app.user.importMfHoldings(r.holdings, replace); casResult = null
+        }
+    }
+    if (howTo) HowToDialog { howTo = false }
     importResult?.let { r ->
         AlertDialog(
             onDismissRequest = { importResult = null },
@@ -180,6 +216,107 @@ fun MutualFundsTab() {
         )
     }
 }
+
+@Composable
+private fun PasswordDialog(error: String?, reading: Boolean, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { if (!reading) onDismiss() },
+        title = { Text("Statement password") },
+        text = {
+            Column {
+                OutlinedTextField(password, { password = it }, label = { Text("PDF password") }, singleLine = true, isError = error != null,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    supportingText = { if (error != null) Text(error) })
+                Text(
+                    "CAMS / KFintech / MF Central: the password you chose when requesting it.\n" +
+                        "NSDL / CDSL: your PAN in capitals followed by your date of birth as DDMMYYYY, e.g. ABCDE1234F01011980.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (reading) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Reading your statement…", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = !reading && password.isNotEmpty(), onClick = { onOpen(password) }) { Text("Open") } },
+        dismissButton = { TextButton(enabled = !reading, onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun CasResultDialog(r: io.github.akrishna87.sievr.core.mf.CasParser.Result, onDismiss: () -> Unit, onImport: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Found ${r.holdings.size} fund${if (r.holdings.size == 1) "" else "s"}") },
+        text = {
+            Column(Modifier.androidxVerticalScroll()) {
+                if (r.statementValue > 0) Text("Worth ${Fmt.price(r.statementValue)} on the statement.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                r.holdings.take(12).forEach { h ->
+                    Text("• ${h.name}", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("   ${Fmt.number(h.units, 3)} units · invested ${Fmt.price(h.invested)}", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (r.holdings.size > 12) Text("…and ${r.holdings.size - 12} more", style = MaterialTheme.typography.bodySmall)
+                if (r.missingCost > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("${r.missingCost} fund(s) had no cost on the statement, so the current value is used as the amount invested. You can edit them afterwards.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                }
+                if (r.unmatched.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Not in today's NAV list (merged or closed), so not imported: " +
+                        r.unmatched.take(5).joinToString(", ") { it.name.ifBlank { it.isin } }, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = r.holdings.isNotEmpty(), onClick = { onImport(true) }) { Text("Replace my funds") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(enabled = r.holdings.isNotEmpty(), onClick = { onImport(false) }) { Text("Add to them") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun HowToDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Get your statement (CAS)") },
+        text = {
+            Column(Modifier.androidxVerticalScroll()) {
+                Text("One PDF lists every mutual fund you hold, whichever app, bank or broker you bought through. It's free.",
+                    style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(10.dp))
+                Text("CAMS (covers all fund houses)", style = MaterialTheme.typography.titleSmall)
+                Text("1. Open camsonline.com → Investors → Statements → CAS – CAMS+KFintech.\n" +
+                    "2. Choose Summary (or Detailed), your PAN and the email registered with your funds.\n" +
+                    "3. Set a password. The PDF arrives by email in a few minutes.", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Text("Or MF Central", style = MaterialTheme.typography.titleSmall)
+                Text("Log in at mfcentral.com with your PAN and download the CAS.", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Text("Funds held in a demat account", style = MaterialTheme.typography.titleSmall)
+                Text("The monthly NSDL or CDSL CAS email works too (password: PAN + date of birth).", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Text("Then tap \"Import statement\", pick the PDF and type its password. Re-import any time to update your units after new SIP instalments.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+    )
+}
+
+@Composable
+private fun Modifier.androidxVerticalScroll(): Modifier = this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
 
 @Composable
 private fun Summary(r: MutualFunds.Report) {
@@ -202,13 +339,20 @@ private fun Summary(r: MutualFunds.Report) {
 }
 
 @Composable
-private fun Actions(onAdd: () -> Unit, onImport: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onAdd, Modifier.weight(1f)) {
-            Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Add fund")
+private fun Actions(onAdd: () -> Unit, onPdf: () -> Unit, onCsv: () -> Unit, onHowTo: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.Button(onClick = onPdf, Modifier.weight(1f)) {
+                Icon(Icons.Default.FileUpload, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Import statement")
+            }
+            OutlinedButton(onClick = onAdd, Modifier.weight(1f)) {
+                Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Add fund")
+            }
         }
-        OutlinedButton(onClick = onImport, Modifier.weight(1f)) {
-            Icon(Icons.Default.FileUpload, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Import CSV")
+        Row {
+            TextButton(onClick = onHowTo) { Text("How do I get my statement?") }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onCsv) { Text("Use a CSV") }
         }
     }
 }

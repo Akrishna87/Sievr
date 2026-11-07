@@ -33,7 +33,8 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 - Multiple watchlists with custom columns
 - Portfolio X-ray: import a broker CSV (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
   expected dividends, concentration and red flags (pledges, distress, over-concentration)
-- Mutual funds: add funds by name (or import a holdings CSV) with units and amount invested; values refresh with AMFI's
+- Mutual funds: import your CAS statement PDF (CAMS, KFintech, MF Central, NSDL or CDSL; read on the phone, never
+  uploaded) or add funds by name (a holdings CSV works too) with units and amount invested; values refresh with AMFI's
   NAVs every business day, with gains, the last day's change, and asset, category and fund-house mix
 - Price, % move, RSI and 52-week alerts; big-move alerts for watchlists; a daily digest
 
