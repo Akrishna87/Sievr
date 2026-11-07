@@ -76,9 +76,6 @@ fun PortfolioScreen() {
     var reading by remember { mutableStateOf(false) }
     var shareResult by remember { mutableStateOf<io.github.akrishna87.sievr.core.portfolio.ShareStatement.Result?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) { pdf = uri; passwordError = null }
-    }
     fun readPdf(password: String) {
         val uri = pdf ?: return
         val market = SievrApp.instance.market.market ?: return
@@ -100,8 +97,7 @@ fun PortfolioScreen() {
         }
     }
 
-    val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun importSpreadsheet(uri: android.net.Uri) {
         val text = readSpreadsheet(context, uri)
         val result = text?.let { PortfolioAnalyzer.parseCsv(it, SievrApp.instance.market.market) }
         if (result == null || result.holdings.isEmpty()) {
@@ -114,10 +110,17 @@ fun PortfolioScreen() {
         }
     }
 
+    // One picker for everything: a statement PDF goes to the password step, an Excel or CSV report to the import.
+    fun onPicked(uri: android.net.Uri) {
+        if (isPdf(context, uri)) { pdf = uri; passwordError = null } else importSpreadsheet(uri)
+    }
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) onPicked(uri) }
+    val importer = pdfPicker
+
     Scaffold(topBar = {
         TopAppBar(title = { Text("Portfolio") }, actions = {
             if (tab == 0) {
-                IconButton(onClick = { pdfPicker.launch("application/pdf") }) { Icon(Icons.Default.FileUpload, "Import statement (PDF)") }
+                IconButton(onClick = { pdfPicker.launch("*/*") }) { Icon(Icons.Default.FileUpload, "Import a statement PDF or broker report") }
                 IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.Description, "Import broker report (Excel or CSV)") }
                 IconButton(onClick = { picking = true }) { Icon(Icons.Default.Add, "Add holding") }
             }
@@ -136,7 +139,7 @@ fun PortfolioScreen() {
                             "or import your broker's holdings report (Excel or CSV, e.g. Groww's Stocks_Holdings file), or add shares by hand. Sievr shows your gains, sector mix, weighted P/E and ROE, " +
                             "expected dividends and red flags. Everything stays on this phone.")
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                            androidx.compose.material3.Button(onClick = { pdfPicker.launch("application/pdf") }, Modifier.weight(1f)) { Text("Import statement") }
+                            androidx.compose.material3.Button(onClick = { pdfPicker.launch("*/*") }, Modifier.weight(1f)) { Text("Import statement") }
                             androidx.compose.material3.OutlinedButton(onClick = { picking = true }, Modifier.weight(1f)) { Text("Add stock") }
                         }
                         TextButton(onClick = { importer.launch("*/*") }, Modifier.padding(horizontal = 8.dp)) { Text("Use your broker's report, Excel or CSV (has your buy prices)") }
@@ -333,3 +336,8 @@ internal fun readSpreadsheet(context: android.content.Context, uri: android.net.
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
     if (io.github.akrishna87.sievr.core.util.Xlsx.looksLikeXlsx(bytes)) io.github.akrishna87.sievr.core.util.Xlsx.toCsv(bytes) else bytes.decodeToString()
 }.getOrNull()
+
+/** True when the file is a PDF (starts with "%PDF"), whatever its name or type says. */
+internal fun isPdf(context: android.content.Context, uri: android.net.Uri): Boolean = runCatching {
+    context.contentResolver.openInputStream(uri)?.use { input -> val b = ByteArray(5); input.read(b) == 5 && String(b) == "%PDF-" } ?: false
+}.getOrDefault(false)

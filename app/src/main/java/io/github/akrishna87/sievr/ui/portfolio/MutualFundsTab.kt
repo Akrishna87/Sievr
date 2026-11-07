@@ -84,9 +84,6 @@ fun MutualFundsTab() {
 
     LaunchedEffect(Unit) { app.mf.start() }
 
-    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) { pdf = uri; passwordError = null }
-    }
     fun readPdf(password: String) {
         val uri = pdf ?: return
         val schemes = mf.data?.schemes ?: return
@@ -108,9 +105,8 @@ fun MutualFundsTab() {
         }
     }
 
-    val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val schemes = mf.data?.schemes ?: return@rememberLauncherForActivityResult
+    fun importSpreadsheet(uri: android.net.Uri) {
+        val schemes = mf.data?.schemes ?: return
         val text = readSpreadsheet(context, uri)
         val result = text?.let { MutualFunds.parseCsv(it, schemes) }
         if (result == null || result.holdings.isEmpty()) {
@@ -118,6 +114,13 @@ fun MutualFundsTab() {
                 "from Groww, Kuvera, Coin or your CAMS/KFintech statement and try again, or add funds one by one."
         } else importResult = result
     }
+
+    // One picker for everything: a statement PDF goes to the password step, an Excel or CSV report to the import.
+    fun onPicked(uri: android.net.Uri) {
+        if (isPdf(context, uri)) { pdf = uri; passwordError = null } else importSpreadsheet(uri)
+    }
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) onPicked(uri) }
+    val importer = pdfPicker
 
     val data = mf.data
     if (data == null) {
@@ -157,10 +160,10 @@ fun MutualFundsTab() {
                         "with the latest NAV every business day. Your statement is read on this phone and never uploaded.",
                 )
             }
-            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("application/pdf") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
+            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("*/*") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
         } else {
             item { Summary(report) }
-            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("application/pdf") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
+            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("*/*") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
             item { SectionHeader("Funds (${report.positions.size})") }
             items(report.positions, key = { it.holding.code }) { p ->
                 FundRow(p) { editing = p.scheme to p.holding }
