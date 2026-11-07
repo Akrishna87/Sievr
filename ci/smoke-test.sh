@@ -14,12 +14,27 @@ shot() { sleep "${2:-3}"; adb exec-out screencap -p > "$out/$1.png"; }
 crashed() { adb logcat -d | grep -E "FATAL EXCEPTION|AndroidRuntime: .*$pkg" >/dev/null; }
 # Taps the centre of the Nth (default first) view whose text or content description is $1.
 tap() {
+  dismiss_anr
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
   local xml; xml=$(adb shell cat /sdcard/ui.xml)
   local b; b=$(echo "$xml" | grep -o "<node[^>]*\(text\|content-desc\)=\"$1\"[^>]*" | sed -n "${2:-1}p" | grep -o 'bounds="[^"]*"' | head -1)
   if [ -z "$b" ]; then echo "  (no '$1' on screen)"; return 1; fi
   read -r x1 y1 x2 y2 <<<"$(echo "$b" | grep -o '[0-9]\+' | tr '\n' ' ')"
   adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+}
+
+# The emulator's own apps (e.g. Pixel Launcher) sometimes stop responding on slow CI machines; tap "Wait".
+dismiss_anr() {
+  for _ in 1 2 3; do
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+    local xml; xml=$(adb shell cat /sdcard/ui.xml)
+    echo "$xml" | grep -q "isn.t responding" || return 0
+    echo "  (dismissing a system 'isn't responding' box)"
+    local b; b=$(echo "$xml" | grep -o '<node[^>]*text="Wait"[^>]*' | head -1 | grep -o 'bounds="[^"]*"')
+    [ -z "$b" ] && { adb shell input keyevent 4; sleep 2; continue; }
+    read -r x1 y1 x2 y2 <<<"$(echo "$b" | grep -o '[0-9]\+' | tr '\n' ' ')"
+    adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2)); sleep 2
+  done
 }
 
 shot 01-welcome 8
@@ -30,11 +45,16 @@ for i in $(seq 1 30); do
   adb shell cat /sdcard/ui.xml | grep -q "Closing data for" && break
   sleep 3
 done
+if ! adb shell cat /sdcard/ui.xml | grep -q "Closing data for"; then
+  shot 02-market-missing 1
+  echo "=== The Market tab never showed its data; failing so this build isn't published untested ==="
+  exit 1
+fi
 shot 02-market 2
 for tab in Screens Watchlist Portfolio More; do
   tap "$tab" && shot "03-$(echo $tab | tr A-Z a-z)" 3
 done
-tap Portfolio; sleep 2; tap "Mutual funds" && sleep 8 && tap "Add fund" && sleep 2 && adb shell input text "parag%sflexi%sdirect" && shot 03-mutual-funds 4
+tap Portfolio; sleep 2; tap "Mutual funds" && sleep 8 && shot 03-mutual-funds-tab 1 && tap "Add fund" && sleep 2 && adb shell input text "parag%sflexi%sdirect" && shot 03-mutual-funds 4
 adb shell input keyevent 4; sleep 1; adb shell input keyevent 4; sleep 1
 tap Screens; sleep 2; tap "Magic Formula" && shot 04-magic-formula 4
 tap "Back"; sleep 1; tap Market; sleep 2
