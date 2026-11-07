@@ -28,28 +28,46 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KH
 
 
 def parse_navall(text: str) -> list[dict]:
-    """Schemes from AMFI's NAVAll.txt: category headings, fund-house lines and semicolon-separated rows."""
+    """
+    Schemes from AMFI's NAVAll.txt: category headings, fund-house lines and semicolon-separated rows.
+    Columns are found from the header line, which has been both
+      Scheme Code;ISIN…;ISIN…;Scheme Name;Net Asset Value;Date
+    and
+      Scheme Code;ISIN…;ISIN…;Scheme Name;Plan;Option;Net Asset Value;Date
+    """
     schemes = []
     category = ""
     amc = ""
+    cols = {"code": 0, "isin1": 1, "isin2": 2, "name": 3, "nav": 4, "date": 5}
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("Scheme Code"):
+        if not line:
             continue
-        parts = line.split(";")
-        if len(parts) >= 6:
-            code, isin1, isin2, name, nav, date = (p.strip() for p in parts[:6])
-            if not code.isdigit():
-                continue
+        parts = [p.strip() for p in line.split(";")]
+        if parts[0].lower() == "scheme code":
+            low = [p.lower() for p in parts]
+            def find(*keys):
+                return next((i for i, h in enumerate(low) if any(k in h for k in keys)), None)
+            cols = {"code": 0, "isin1": 1, "isin2": 2, "name": find("scheme name"), "plan": find("plan"),
+                    "option": find("option"), "nav": find("net asset value", "nav"), "date": find("date")}
+            continue
+        if len(parts) >= 6 and parts[0].isdigit():
+            def get(key):
+                i = cols.get(key)
+                return parts[i] if i is not None and i < len(parts) else ""
             try:
-                value = float(nav)
-                day = dt.datetime.strptime(date, "%d-%b-%Y").date().isoformat()
+                value = float(get("nav"))
+                day = dt.datetime.strptime(get("date"), "%d-%b-%Y").date().isoformat()
             except ValueError:
                 continue  # "N.A." NAVs and bad dates
             if value <= 0:
                 continue
-            row = {"code": int(code), "name": re.sub(r"\s+", " ", name), "amc": amc, "category": category, "nav": value, "date": day}
-            isins = [i for i in (isin1, isin2) if re.fullmatch(r"INF[0-9A-Z]{9}", i or "")]
+            name = re.sub(r"\s+", " ", get("name"))
+            extra = [x for x in (get("plan"), get("option")) if x and x != "-" and x.lower() not in name.lower()]
+            if extra:
+                name = " - ".join([name] + extra)
+            row = {"code": int(parts[0]), "name": name, "amc": amc, "category": category, "nav": value, "date": day}
+            isins = [i for i in (get("isin1"), get("isin2")) if re.fullmatch(r"INF[0-9A-Z]{9}", i or "")]
             if isins:
                 row["isin"] = isins
             schemes.append(row)
@@ -57,7 +75,7 @@ def parse_navall(text: str) -> list[dict]:
             # e.g. "Open Ended Schemes(Equity Scheme - Large Cap Fund)"
             m = re.search(r"\((.*)\)", line)
             category = (m.group(1) if m else line).strip()
-        else:
+        elif ";" not in line:
             amc = line
     return schemes
 

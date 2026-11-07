@@ -35,3 +35,30 @@ def test_previous():
     assert out[120465]["prevNav"] == 61.0 and out[120465]["prevDate"] == "2026-10-30"
     assert out[119091]["prevNav"] == 5099.0  # same day re-run keeps the earlier previous NAV
     assert "prevNav" not in out[120466]
+
+
+NEW_LAYOUT = """Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ 
+Open Ended Schemes(Children’s Fund - Childrens' Fund)
+ 
+Axis Mutual Fund
+ 
+135762;INF846K01WO1;-;Axis Children's Fund;Direct Plan;Growth Option;30.7694;06-Nov-2026
+135763;INF846K01WS2;INF846K01WQ6;Axis Children's Fund;Direct Plan;IDCW Option;28.3978;06-Nov-2026
+ 
+Open Ended Schemes(Debt Scheme - Banking and PSU Fund)
+ 
+Franklin Templeton Mutual Fund
+ 
+129008;INF090I01KR8;-;Franklin India Banking & PSU Debt Fund;Direct Plan;Growth;25.4003;06-Nov-2026
+"""
+
+
+def test_parse_plan_option_layout():
+    s = m.parse_navall(NEW_LAYOUT)
+    assert [x["code"] for x in s] == [135762, 135763, 129008]
+    assert s[0]["name"] == "Axis Children's Fund - Direct Plan - Growth Option" and s[0]["nav"] == 30.7694
+    assert s[0]["amc"] == "Axis Mutual Fund" and s[0]["date"] == "2026-11-06"
+    assert s[2]["name"] == "Franklin India Banking & PSU Debt Fund - Direct Plan - Growth"
+    assert s[2]["category"] == "Debt Scheme - Banking and PSU Fund" and s[2]["amc"] == "Franklin Templeton Mutual Fund"
+    assert s[1]["isin"] == ["INF846K01WS2", "INF846K01WQ6"]
