@@ -230,8 +230,9 @@ internal fun PasswordDialog(error: String?, reading: Boolean, onDismiss: () -> U
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     supportingText = { if (error != null) Text(error) })
                 Text(
-                    "CAMS / KFintech / MF Central: the password you chose when requesting it.\n" +
-                        "NSDL / CDSL: your PAN in capitals followed by your date of birth as DDMMYYYY, e.g. ABCDE1234F01011980.",
+                    "Leave it blank if the PDF has no password (e.g. downloaded from DigiLocker).\n" +
+                        "CAMS / KFintech / MF Central: the password you chose when requesting it.\n" +
+                        "NSDL / CDSL: usually your PAN in capitals, sometimes followed by your date of birth (DDMMYYYY). The statement email says which.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (reading) {
@@ -244,7 +245,7 @@ internal fun PasswordDialog(error: String?, reading: Boolean, onDismiss: () -> U
                 }
             }
         },
-        confirmButton = { TextButton(enabled = !reading && password.isNotEmpty(), onClick = { onOpen(password) }) { Text("Open") } },
+        confirmButton = { TextButton(enabled = !reading, onClick = { onOpen(password) }) { Text("Open") } },
         dismissButton = { TextButton(enabled = !reading, onClick = onDismiss) { Text("Cancel") } },
     )
 }
