@@ -111,10 +111,10 @@ fun MutualFundsTab() {
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val schemes = mf.data?.schemes ?: return@rememberLauncherForActivityResult
-        val text = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+        val text = readSpreadsheet(context, uri)
         val result = text?.let { MutualFunds.parseCsv(it, schemes) }
         if (result == null || result.holdings.isEmpty()) {
-            importMessage = "Couldn't find scheme names (or ISINs) and units in that file. Export your mutual fund holdings as CSV " +
+            importMessage = "Couldn't find scheme names (or ISINs) and units in that file. Export your mutual fund holdings as Excel or CSV " +
                 "from Groww, Kuvera, Coin or your CAMS/KFintech statement and try again, or add funds one by one."
         } else importResult = result
     }
@@ -354,7 +354,7 @@ private fun Actions(onAdd: () -> Unit, onPdf: () -> Unit, onCsv: () -> Unit, onH
         Row {
             TextButton(onClick = onHowTo) { Text("How do I get my statement?") }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onCsv) { Text("Use a CSV") }
+            TextButton(onClick = onCsv) { Text("Use Excel or CSV") }
         }
     }
 }

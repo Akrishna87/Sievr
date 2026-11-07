@@ -69,6 +69,7 @@ fun PortfolioScreen() {
     var editing by remember { mutableStateOf<Pair<String, Holding?>?>(null) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<List<Holding>>(emptyList()) }
+    var pendingUnmatched by remember { mutableStateOf<List<String>>(emptyList()) }
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
     var pdf by remember { mutableStateOf<android.net.Uri?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
@@ -101,17 +102,23 @@ fun PortfolioScreen() {
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val text = runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
-        val holdings = text?.let { PortfolioAnalyzer.parseCsv(it) }.orEmpty()
-        if (holdings.isEmpty()) importMessage = "Couldn't find symbol, quantity and average price columns in that file. Export holdings as CSV from your broker (Zerodha Console, Groww, Upstox…) and try again."
-        else pendingImport = holdings
+        val text = readSpreadsheet(context, uri)
+        val result = text?.let { PortfolioAnalyzer.parseCsv(it, SievrApp.instance.market.market) }
+        if (result == null || result.holdings.isEmpty()) {
+            importMessage = "Couldn't find stock names (or symbols or ISINs), quantities and buy prices in that file. Download the holdings " +
+                "report from your broker (Groww: Profile → Reports → Holdings; Zerodha: Console → Portfolio → Holdings → Download) as Excel or CSV and try again." +
+                (if (!result?.unmatched.isNullOrEmpty()) "\n\nNot recognised: " + result!!.unmatched.take(5).joinToString(", ") else "")
+        } else {
+            pendingImport = result.holdings
+            pendingUnmatched = result.unmatched
+        }
     }
 
     Scaffold(topBar = {
         TopAppBar(title = { Text("Portfolio") }, actions = {
             if (tab == 0) {
                 IconButton(onClick = { pdfPicker.launch("application/pdf") }) { Icon(Icons.Default.FileUpload, "Import statement (PDF)") }
-                IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.Description, "Import broker CSV") }
+                IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.Description, "Import broker report (Excel or CSV)") }
                 IconButton(onClick = { picking = true }) { Icon(Icons.Default.Add, "Add holding") }
             }
         })
@@ -132,7 +139,7 @@ fun PortfolioScreen() {
                             androidx.compose.material3.Button(onClick = { pdfPicker.launch("application/pdf") }, Modifier.weight(1f)) { Text("Import statement") }
                             androidx.compose.material3.OutlinedButton(onClick = { picking = true }, Modifier.weight(1f)) { Text("Add stock") }
                         }
-                        TextButton(onClick = { importer.launch("*/*") }, Modifier.padding(horizontal = 8.dp)) { Text("Use a broker CSV (has your buy prices)") }
+                        TextButton(onClick = { importer.launch("*/*") }, Modifier.padding(horizontal = 8.dp)) { Text("Use your broker's report, Excel or CSV (has your buy prices)") }
                     }
                 } else PortfolioBody(user.holdings, market) { h -> editing = h.symbol to h }
                 if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add a holding", recent = user.recentSymbols) {
@@ -153,7 +160,11 @@ fun PortfolioScreen() {
         AlertDialog(
             onDismissRequest = { pendingImport = emptyList() },
             title = { Text("Import ${pendingImport.size} holdings?") },
-            text = { Text(pendingImport.take(8).joinToString("\n") { "${it.symbol}: ${Fmt.number(it.quantity, 0)} @ ${Fmt.price(it.averageCost)}" } + if (pendingImport.size > 8) "\n…" else "") },
+            text = {
+                Text(pendingImport.take(8).joinToString("\n") { "${it.symbol}: ${Fmt.number(it.quantity, 0)} @ ${Fmt.price(it.averageCost)}" } +
+                    (if (pendingImport.size > 8) "\n…and ${pendingImport.size - 8} more" else "") +
+                    (if (pendingUnmatched.isNotEmpty()) "\n\nNot in Sievr's market data, so skipped: " + pendingUnmatched.take(5).joinToString(", ") else ""))
+            },
             confirmButton = { TextButton(onClick = { store.importHoldings(pendingImport, replace = true); pendingImport = emptyList() }) { Text("Replace portfolio") } },
             dismissButton = { TextButton(onClick = { store.importHoldings(pendingImport, replace = false); pendingImport = emptyList() }) { Text("Add to it") } },
         )
@@ -316,3 +327,9 @@ private fun ShareResultDialog(r: io.github.akrishna87.sievr.core.portfolio.Share
         },
     )
 }
+
+/** A spreadsheet file's contents as CSV text, whether it's Excel (.xlsx) or already CSV. */
+internal fun readSpreadsheet(context: android.content.Context, uri: android.net.Uri): String? = runCatching {
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+    if (io.github.akrishna87.sievr.core.util.Xlsx.looksLikeXlsx(bytes)) io.github.akrishna87.sievr.core.util.Xlsx.toCsv(bytes) else bytes.decodeToString()
+}.getOrNull()

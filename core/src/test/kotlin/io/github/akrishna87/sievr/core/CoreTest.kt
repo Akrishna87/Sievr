@@ -157,7 +157,7 @@ class EnricherTest {
         assertTrue(report.warnings.any { it.contains("NOPE") })
         assertNotNull(report.weighted["roe"])
         val csv = "Instrument,Qty.,Avg. cost,LTP\nGOOD,10,\"1,000.50\",1100\nCHEAP-EQ,5,40,41\n"
-        assertEquals(listOf(Holding("GOOD", 10.0, 1000.5), Holding("CHEAP", 5.0, 40.0)), PortfolioAnalyzer.parseCsv(csv))
+        assertEquals(listOf(Holding("GOOD", 10.0, 1000.5), Holding("CHEAP", 5.0, 40.0)), PortfolioAnalyzer.parseCsv(csv).holdings)
     }
 }
 

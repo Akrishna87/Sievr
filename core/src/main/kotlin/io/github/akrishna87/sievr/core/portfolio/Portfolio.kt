@@ -110,28 +110,68 @@ object PortfolioAnalyzer {
         )
     }
 
+    data class Import(val holdings: List<Holding>, val unmatched: List<String>)
+
     /**
-     * Reads holdings from a broker CSV export. Finds the symbol, quantity and average price
-     * columns by their headers (works with Zerodha, Groww, Upstox and most others).
+     * Reads holdings from a broker export (CSV text, or an Excel file converted with Xlsx.toCsv): Zerodha
+     * Console, Groww, Upstox, Angel and most others. The header row is found wherever it is (exports often
+     * start with account details), then each row is matched to a stock by ISIN, by symbol, or by company name.
+     * Without [market], only a symbol column can be used.
      */
-    fun parseCsv(text: String): List<Holding> {
+    fun parseCsv(text: String, market: Market? = null): Import {
         val lines = text.lines().filter { it.isNotBlank() }
-        if (lines.isEmpty()) return emptyList()
-        val header = splitCsv(lines.first()).map { it.lowercase().trim() }
+        val qtyNames = arrayOf("quantity", "qty", "qty.", "shares", "units", "no. of shares", "holding quantity")
+        val headerIndex = lines.indexOfFirst { l ->
+            val cells = splitCsv(l).map { it.lowercase().trim() }
+            cells.any { c -> qtyNames.any { c == it || c.contains(it) } } &&
+                cells.any { c -> listOf("symbol", "instrument", "stock", "scrip", "ticker", "isin", "company", "name").any { c.contains(it) } }
+        }
+        if (headerIndex < 0) return Import(emptyList(), emptyList())
+        val header = splitCsv(lines[headerIndex]).map { it.lowercase().trim() }
         fun col(vararg names: String) = header.indexOfFirst { h -> names.any { h == it } }.takeIf { it >= 0 }
             ?: header.indexOfFirst { h -> names.any { h.contains(it) } }
-        val sym = col("symbol", "instrument", "tradingsymbol", "stock", "scrip", "ticker")
-        val qty = col("quantity", "qty", "qty.", "shares", "units")
-        val avg = col("avg. cost", "average price", "avg price", "avg cost", "average cost", "buy price", "avg")
-        if (sym < 0 || qty < 0 || avg < 0) return emptyList()
-        return lines.drop(1).mapNotNull { line ->
+        val sym = col("symbol", "tradingsymbol", "trading symbol", "instrument", "scrip", "ticker", "nse symbol", "bse symbol")
+        val isin = col("isin")
+        val name = col("stock name", "company name", "security name", "company", "stock", "name", "security")
+        val qty = col(*qtyNames)
+        val avg = col("avg. cost", "average price", "avg price", "avg cost", "average cost", "average buy price", "avg. buy price",
+            "buy average", "buy avg", "buy price", "avg")
+        val buyValue = col("buy value", "invested value", "invested amount", "investment value", "cost value")
+        if (qty < 0 || (sym < 0 && isin < 0 && name < 0)) return Import(emptyList(), emptyList())
+
+        val byIsin = market?.stocks?.mapNotNull { s -> s.data.isin?.let { it to s.symbol } }?.toMap().orEmpty()
+        val bySymbol = market?.stocks?.associate { it.symbol to it.symbol }.orEmpty()
+        val byName = market?.stocks?.groupBy { normalizeName(it.name) }?.mapValues { it.value.first().symbol }.orEmpty()
+
+        val out = LinkedHashMap<String, Holding>()
+        val unmatched = mutableListOf<String>()
+        for (line in lines.drop(headerIndex + 1)) {
             val cells = splitCsv(line)
-            val s = cells.getOrNull(sym)?.trim()?.uppercase()?.removeSuffix(".NS")?.removeSuffix("-EQ") ?: return@mapNotNull null
-            val q = cells.getOrNull(qty)?.replace(",", "")?.trim()?.toDoubleOrNull() ?: return@mapNotNull null
-            val a = cells.getOrNull(avg)?.replace(",", "")?.replace("₹", "")?.trim()?.toDoubleOrNull() ?: return@mapNotNull null
-            if (s.isBlank() || q <= 0) null else Holding(s, q, a)
+            fun cell(i: Int) = if (i < 0) "" else cells.getOrNull(i)?.trim().orEmpty()
+            fun num(i: Int) = cell(i).replace(",", "").replace("₹", "").replace("Rs.", "").trim().toDoubleOrNull()
+            val q = num(qty) ?: continue
+            if (q <= 0) continue
+            val rawSym = cell(sym).uppercase().removeSuffix(".NS").removeSuffix(".BO").removeSuffix("-EQ").removeSuffix("-BE")
+            val symbol = byIsin[cell(isin).uppercase()]
+                ?: bySymbol[rawSym]
+                ?: byName[normalizeName(cell(name))]
+                ?: rawSym.takeIf { it.isNotBlank() && market == null }
+            if (symbol == null) {
+                unmatched += cell(name).ifBlank { cell(sym).ifBlank { cell(isin) } }
+                continue
+            }
+            val a = num(avg) ?: num(buyValue)?.let { it / q } ?: continue
+            val prev = out[symbol]
+            out[symbol] = if (prev == null) Holding(symbol, q, a)
+            else Holding(symbol, prev.quantity + q, (prev.quantity * prev.averageCost + q * a) / (prev.quantity + q))
         }
+        return Import(out.values.toList(), unmatched.filter { it.isNotBlank() && !it.lowercase().startsWith("total") })
     }
+
+    /** "Reliance Industries Ltd." and "RELIANCE INDUSTRIES LIMITED" both become "relianceindustries". */
+    internal fun normalizeName(name: String): String =
+        name.lowercase().replace("&", "and").replace(Regex("""\b(limited|ltd|ltd\.|the|co|company|corporation|corp|inc)\b"""), "")
+            .replace(Regex("[^a-z0-9]"), "")
 
     internal fun splitCsv(line: String): List<String> {
         val out = mutableListOf<String>()
