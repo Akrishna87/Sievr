@@ -3,6 +3,9 @@ package io.github.akrishna87.sievr.ui.portfolio
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -67,6 +70,34 @@ fun PortfolioScreen() {
     var importMessage by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<List<Holding>>(emptyList()) }
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    var pdf by remember { mutableStateOf<android.net.Uri?>(null) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var reading by remember { mutableStateOf(false) }
+    var shareResult by remember { mutableStateOf<io.github.akrishna87.sievr.core.portfolio.ShareStatement.Result?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) { pdf = uri; passwordError = null }
+    }
+    fun readPdf(password: String) {
+        val uri = pdf ?: return
+        val market = SievrApp.instance.market.market ?: return
+        reading = true
+        scope.launch {
+            when (val o = io.github.akrishna87.sievr.data.CasReader.read(context, uri, password)) {
+                is io.github.akrishna87.sievr.data.CasReader.Outcome.Read -> {
+                    pdf = null
+                    val r = io.github.akrishna87.sievr.core.portfolio.ShareStatement.parse(o.text, market)
+                    if (r.holdings.isEmpty() && r.unmatched.isEmpty()) {
+                        importMessage = "No shares were found in that PDF. Use the NSDL or CDSL Consolidated Account Statement " +
+                            "(CAS) that's emailed to you every month; it lists the shares in all your demat accounts."
+                    } else shareResult = r
+                }
+                io.github.akrishna87.sievr.data.CasReader.Outcome.WrongPassword -> passwordError = "That password didn't open it. Try again."
+                is io.github.akrishna87.sievr.data.CasReader.Outcome.Failed -> { pdf = null; importMessage = o.message }
+            }
+            reading = false
+        }
+    }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -79,7 +110,8 @@ fun PortfolioScreen() {
     Scaffold(topBar = {
         TopAppBar(title = { Text("Portfolio") }, actions = {
             if (tab == 0) {
-                IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.FileUpload, "Import broker CSV") }
+                IconButton(onClick = { pdfPicker.launch("application/pdf") }) { Icon(Icons.Default.FileUpload, "Import statement (PDF)") }
+                IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.Description, "Import broker CSV") }
                 IconButton(onClick = { picking = true }) { Icon(Icons.Default.Add, "Add holding") }
             }
         })
@@ -92,8 +124,16 @@ fun PortfolioScreen() {
             if (tab == 1) MutualFundsTab()
             else WithMarket { market ->
                 if (user.holdings.isEmpty()) {
-                    EmptyState("Track your portfolio", "Add holdings by hand or import your broker's holdings CSV. Sievr shows your gains, sector mix, " +
-                        "weighted P/E and ROE, expected dividends, concentration and red flags. Everything stays on this phone.", "Add a holding") { picking = true }
+                    Column {
+                        EmptyState("Track your shares", "Import your demat statement (NSDL or CDSL CAS PDF) to bring in every share at once, " +
+                            "or import your broker's holdings CSV, or add shares by hand. Sievr shows your gains, sector mix, weighted P/E and ROE, " +
+                            "expected dividends and red flags. Everything stays on this phone.")
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                            androidx.compose.material3.Button(onClick = { pdfPicker.launch("application/pdf") }, Modifier.weight(1f)) { Text("Import statement") }
+                            androidx.compose.material3.OutlinedButton(onClick = { picking = true }, Modifier.weight(1f)) { Text("Add stock") }
+                        }
+                        TextButton(onClick = { importer.launch("*/*") }, Modifier.padding(horizontal = 8.dp)) { Text("Use a broker CSV (has your buy prices)") }
+                    }
                 } else PortfolioBody(user.holdings, market) { h -> editing = h.symbol to h }
                 if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add a holding", recent = user.recentSymbols) {
                     picking = false
@@ -103,6 +143,8 @@ fun PortfolioScreen() {
             }
         }
     }
+    if (pdf != null) PasswordDialog(passwordError, reading, onDismiss = { pdf = null; passwordError = null }) { readPdf(it) }
+    shareResult?.let { r -> ShareResultDialog(r, onDismiss = { shareResult = null }) { replace -> store.importHoldings(r.holdings, replace); shareResult = null } }
     importMessage?.let {
         AlertDialog(onDismissRequest = { importMessage = null }, title = { Text("Import") }, text = { Text(it) },
             confirmButton = { TextButton(onClick = { importMessage = null }) { Text("OK") } })
@@ -232,6 +274,44 @@ private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, onD
             Row {
                 if (existing != null) TextButton(onClick = { store.removeHolding(symbol); onDismiss() }) { Text("Remove") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ShareResultDialog(r: io.github.akrishna87.sievr.core.portfolio.ShareStatement.Result, onDismiss: () -> Unit, onImport: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Found ${r.holdings.size} stock${if (r.holdings.size == 1) "" else "s"}") },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                if (r.statementValue > 0) Text("Worth ${Fmt.price(r.statementValue)} on the statement.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                r.holdings.take(15).forEach { h ->
+                    Text("• ${h.symbol}: ${Fmt.number(h.quantity, 0)} shares" + if (h.symbol in r.priceIsPlaceholder) "" else " @ ${Fmt.price(h.averageCost)}",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (r.holdings.size > 15) Text("…and ${r.holdings.size - 15} more", style = MaterialTheme.typography.bodySmall)
+                if (r.priceIsPlaceholder.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Demat statements don't show what you paid, so today's price is used as the buy price for " +
+                        "${r.priceIsPlaceholder.size} stock(s). Gains will show from today until you set the real price: tap the stock under " +
+                        "Holdings → Edit. A broker CSV includes buy prices if you'd rather import that.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                }
+                if (r.unmatched.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Not in Sievr's market data (unlisted or suspended), so not imported: " + r.unmatched.take(5).joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = r.holdings.isNotEmpty(), onClick = { onImport(true) }) { Text("Replace my stocks") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(enabled = r.holdings.isNotEmpty(), onClick = { onImport(false) }) { Text("Add to them") }
             }
         },
     )

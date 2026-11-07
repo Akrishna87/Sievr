@@ -6,20 +6,19 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import com.tom_roush.pdfbox.text.PDFTextStripper
-import io.github.akrishna87.sievr.core.mf.CasParser
-import io.github.akrishna87.sievr.core.mf.MfScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Opens a CAS PDF with its password and reads the holdings, all on the phone. */
 object CasReader {
     sealed interface Outcome {
-        data class Read(val result: CasParser.Result) : Outcome
+        /** The statement's text, for CasParser (funds) or ShareStatement (shares). */
+        data class Read(val text: String) : Outcome
         data object WrongPassword : Outcome
         data class Failed(val message: String) : Outcome
     }
 
-    suspend fun read(context: Context, uri: Uri, password: String, schemes: List<MfScheme>): Outcome = withContext(Dispatchers.Default) {
+    suspend fun read(context: Context, uri: Uri, password: String): Outcome = withContext(Dispatchers.Default) {
         try {
             PDFBoxResourceLoader.init(context.applicationContext)
             val text = context.contentResolver.openInputStream(uri)?.use { input ->
@@ -27,7 +26,7 @@ object CasReader {
                     PDFTextStripper().apply { setSortByPosition(true) }.getText(doc)
                 }
             } ?: return@withContext Outcome.Failed("Couldn't open that file.")
-            Outcome.Read(CasParser.parse(text, schemes))
+            Outcome.Read(text)
         } catch (_: InvalidPasswordException) {
             Outcome.WrongPassword
         } catch (e: Exception) {

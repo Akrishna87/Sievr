@@ -92,13 +92,14 @@ fun MutualFundsTab() {
         val schemes = mf.data?.schemes ?: return
         reading = true
         scope.launch {
-            when (val o = io.github.akrishna87.sievr.data.CasReader.read(context, uri, password, schemes)) {
+            when (val o = io.github.akrishna87.sievr.data.CasReader.read(context, uri, password)) {
                 is io.github.akrishna87.sievr.data.CasReader.Outcome.Read -> {
                     pdf = null
-                    if (o.result.holdings.isEmpty() && o.result.unmatched.isEmpty()) {
+                    val result = io.github.akrishna87.sievr.core.mf.CasParser.parse(o.text, schemes)
+                    if (result.holdings.isEmpty() && result.unmatched.isEmpty()) {
                         importMessage = "No mutual fund holdings were found in that PDF. Use a Consolidated Account Statement (CAS) " +
                             "from CAMS, KFintech, MF Central, NSDL or CDSL — see \"How do I get my statement?\""
-                    } else casResult = o.result
+                    } else casResult = result
                 }
                 io.github.akrishna87.sievr.data.CasReader.Outcome.WrongPassword -> passwordError = "That password didn't open it. Try again."
                 is io.github.akrishna87.sievr.data.CasReader.Outcome.Failed -> { pdf = null; importMessage = o.message }
@@ -218,7 +219,7 @@ fun MutualFundsTab() {
 }
 
 @Composable
-private fun PasswordDialog(error: String?, reading: Boolean, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
+internal fun PasswordDialog(error: String?, reading: Boolean, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = { if (!reading) onDismiss() },

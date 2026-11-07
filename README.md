@@ -31,7 +31,7 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 
 **Tracking**
 - Multiple watchlists with custom columns
-- Portfolio X-ray: import a broker CSV (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
+- Portfolio X-ray: import your NSDL/CDSL demat statement PDF (all demat accounts at once) or a broker CSV (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
   expected dividends, concentration and red flags (pledges, distress, over-concentration)
 - Mutual funds: import your CAS statement PDF (CAMS, KFintech, MF Central, NSDL or CDSL; read on the phone, never
   uploaded) or add funds by name (a holdings CSV works too) with units and amount invested; values refresh with AMFI's

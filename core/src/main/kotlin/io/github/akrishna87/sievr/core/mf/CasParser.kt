@@ -37,9 +37,15 @@ object CasParser {
         val statementValue: Double,
     )
 
-    private val isinRegex = Regex("""\bINF[0-9A-Z]{9}\b""")
+    /** Fund units (ISINs starting INF) or company shares (INE). */
+    enum class Kind(val prefix: String) { FUNDS("INF"), SHARES("INE") }
+
+    /** Any Indian ISIN: a holding's block ends at the next one, whether it's a fund or a share. */
+    private val isinRegex = Regex("""\bIN[EF][0-9A-Z]{9}\b""")
     private val numberRegex = Regex("""(?<![\w/.-])-?\(?\d{1,3}(?:,\d{2,3})*(?:\.\d+)\)?|(?<![\w/.-])-?\d+\.\d+""")
-    private val dateRegex = Regex("""\b\d{1,2}[-/ ](?:[A-Za-z]{3}|\d{1,2})[-/ ]\d{2,4}\b""")
+    private val wholeOrDecimal = Regex("""(?<![\w/.-])-?\(?\d{1,3}(?:,\d{2,3})+(?:\.\d+)?\)?(?![\w/])|(?<![\w/.,-])-?\d+(?:\.\d+)?(?![\w/,])""")
+    // "31-Oct-2026", "06/11/2026" or "31 Oct 2026"; never "0 0 2500" from a row of numbers.
+    private val dateRegex = Regex("""\b\d{1,2}([-/])(?:[A-Za-z]{3}|\d{1,2})\1\d{2,4}\b(?!\.\d)|\b\d{1,2} [A-Za-z]{3} \d{4}\b""")
 
     fun parse(text: String, schemes: List<MfScheme>): Result {
         val entries = entries(text)
@@ -61,19 +67,20 @@ object CasParser {
         return Result(holdings.values.toList(), unmatched, missingCost, entries.sumOf { it.value ?: 0.0 })
     }
 
-    /** Every fund block in the statement with positive units. */
-    fun entries(text: String): List<Entry> {
+    /** Every fund (or share) block in the statement with positive units. */
+    fun entries(text: String, kind: Kind = Kind.FUNDS): List<Entry> {
         val clean = text.replace(' ', ' ').replace("\r", "")
         val hits = isinRegex.findAll(clean).toList()
         val out = mutableListOf<Entry>()
         for ((i, hit) in hits.withIndex()) {
+            if (!hit.value.startsWith(kind.prefix)) continue
             // A detailed statement repeats nothing between ISINs; skip a second ISIN in the same line (reinvestment ISINs).
             val end = hits.getOrNull(i + 1)?.range?.first ?: clean.length
             val lineStart = clean.lastIndexOf('\n', hit.range.first).let { if (it < 0) 0 else it + 1 }
             val block = clean.substring(hit.range.first, end)
             val before = clean.substring(lineStart, hit.range.first)
             val name = schemeName(before, block)
-            val entry = labelled(hit.value, name, block) ?: rowEntry(hit.value, name, before, block)
+            val entry = labelled(hit.value, name, block) ?: rowEntry(hit.value, name, before, block, wholeNumbers = kind == Kind.SHARES)
             if (entry != null && entry.units > 0) out += entry
         }
         return out
@@ -98,19 +105,22 @@ object CasParser {
     private class Num(val value: Double, val decimals: Int)
 
     /** The fund's own row; a row wrapped onto following lines is joined with them only if it needs to be. */
-    private fun rowEntry(isin: String, name: String, before: String, block: String): Entry? {
+    private fun rowEntry(isin: String, name: String, before: String, block: String, wholeNumbers: Boolean = false): Entry? {
         val lines = block.lines()
         for (n in 1..minOf(3, lines.size)) {
-            unlabelled(isin, name, before + " " + lines.take(n).joinToString(" "))?.let { return it }
+            unlabelled(isin, name, before + " " + lines.take(n).joinToString(" "), wholeNumbers)?.let { return it }
         }
         return null
     }
 
-    private fun unlabelled(isin: String, name: String, row: String): Entry? {
+    private fun unlabelled(isin: String, name: String, row: String, wholeNumbers: Boolean = false): Entry? {
         val text = dateRegex.replace(row.replace(isin, " "), " ")
-        // Only figures with a decimal point: folio numbers, years and codes are whole numbers.
-        val nums = numberRegex.findAll(text).mapNotNull { m ->
-            if ('.' !in m.value) null else number(m.value)?.let { Num(it, m.value.substringAfterLast('.').count(Char::isDigit)) }
+        // Fund rows: only figures with a decimal point, since folio numbers, years and codes are whole numbers.
+        // Share rows: quantities can be whole ("100"), so whole numbers count too.
+        val pattern = if (wholeNumbers) wholeOrDecimal else numberRegex
+        val nums = pattern.findAll(text).mapNotNull { m ->
+            if (!wholeNumbers && '.' !in m.value) null
+            else number(m.value)?.let { Num(it, if ('.' in m.value) m.value.substringAfterLast('.').count(Char::isDigit) else 0) }
         }.toList()
         if (nums.size < 3) return null
         // Units u and NAV n (u listed first) with u × n ≈ value v. Units × average cost = total cost passes the
