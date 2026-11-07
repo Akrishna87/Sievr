@@ -26,8 +26,9 @@ object ShareStatement {
         val placeholder = mutableSetOf<String>()
         val unmatched = mutableListOf<String>()
         // Company shares, plus ETFs (fund ISINs) that Sievr tracks; other fund units belong to the Mutual funds tab.
+        val etfRows = CasParser.entries(text, CasParser.Kind.ETFS)
         val entries = CasParser.entries(text, CasParser.Kind.SHARES) +
-            CasParser.entries(text, CasParser.Kind.ETFS).filter { bySin[it.isin]?.isEtf == true }
+            etfRows.filter { bySin[it.isin]?.isEtf == true || (bySin[it.isin] == null && CasParser.etfName(it.name)) }
         for (e in entries) {
             val stock = bySin[e.isin]
             if (stock == null) {

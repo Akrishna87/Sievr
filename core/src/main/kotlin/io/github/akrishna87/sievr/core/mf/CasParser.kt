@@ -39,6 +39,9 @@ object CasParser {
         val etfsSkipped: Int = 0,
     )
 
+    /** "Nippon India ETF Nifty BeES", "SBI-ETF Gold": a demat row that's an exchange traded fund. */
+    fun etfName(name: String): Boolean = name.lowercase().let { Regex("""\betf\b""").containsMatchIn(it) || "bees" in it }
+
     private fun looksLikeEtf(isin: String, name: String, schemes: List<MfScheme>): Boolean {
         val s = schemes.firstOrNull { isin in it.isin }
         val text = ((s?.category ?: "") + " " + (s?.name ?: name)).lowercase()
@@ -57,7 +60,8 @@ object CasParser {
 
     /** [etfIsins]: ETFs are tracked under Stocks, so they're left out here (and counted in [Result.etfsSkipped]). */
     fun parse(text: String, schemes: List<MfScheme>, etfIsins: Set<String> = emptySet()): Result {
-        fun isEtf(e: Entry) = e.isin in etfIsins || looksLikeEtf(e.isin, e.name, schemes)
+        // Name-based guesses only once Sievr's market data has ETFs to put them under; otherwise keep them here.
+        fun isEtf(e: Entry) = e.isin in etfIsins || (etfIsins.isNotEmpty() && looksLikeEtf(e.isin, e.name, schemes))
         val entries = entries(text).filterNot { isEtf(it) }
         // ETF rows in a demat table are whole units, so look for them that way too when counting.
         val etfs = (entries(text) + entries(text, Kind.ETFS)).filter { isEtf(it) }.map { it.isin }.toSet()

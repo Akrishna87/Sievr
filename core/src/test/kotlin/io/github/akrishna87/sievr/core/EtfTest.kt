@@ -43,9 +43,18 @@ class EtfTest {
             MfScheme(1, "Nippon India ETF Nifty 50 BeES", category = "Other Scheme - Exchange Traded Fund", nav = 280.5, date = "2026-11-06", isin = listOf("INF204KB14I2")),
             MfScheme(2, "Axis Large Cap Fund - Direct Growth", category = "Equity Scheme - Large Cap Fund", nav = 62.41, date = "2026-11-06", isin = listOf("INF846K01DP8")),
         )
-        val r = CasParser.parse(statement, schemes)
+        val r = CasParser.parse(statement, schemes, etfIsins = setOf("INF204KB14I2"))
         assertEquals(listOf(2), r.holdings.map { it.code })
         assertEquals(1, r.etfsSkipped)
+        // Before the market data has ETFs, nothing is dropped.
+        assertEquals(0, CasParser.parse(statement, schemes).etfsSkipped)
+    }
+
+    @Test fun unknownEtfIsReportedNotDropped() {
+        val r = ShareStatement.parse(statement.replace("INF204KB14I2", "INF999ZZ9999"), market)
+        assertEquals(setOf("GOOD"), r.holdings.map { it.symbol }.toSet())
+        assertEquals(1, r.unmatched.size)
+        assertTrue(r.unmatched.single().contains("ETF", ignoreCase = true))
     }
 
     @Test fun screensLeaveOutEtfs() {

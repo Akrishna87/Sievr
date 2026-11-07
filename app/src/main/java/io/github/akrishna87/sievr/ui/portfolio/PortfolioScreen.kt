@@ -345,7 +345,7 @@ private fun ShareResultDialog(r: io.github.akrishna87.sievr.core.portfolio.Share
                 }
                 if (r.unmatched.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Not in Sievr's market data (unlisted or suspended), so not imported: " + r.unmatched.take(5).joinToString(", "),
+                    Text("Not in Sievr's market data (unlisted, suspended, or an ETF that isn't in the latest data yet), so not imported: " + r.unmatched.take(5).joinToString(", "),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             }
