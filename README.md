@@ -36,6 +36,10 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 - Mutual funds: import your CAS statement PDF (CAMS, KFintech, MF Central, NSDL or CDSL; read on the phone, never
   uploaded) or add funds by name (a holdings CSV works too) with units and amount invested; values refresh with AMFI's
   NAVs every business day, with gains, the last day's change, and asset, category and fund-house mix
+- **Family portfolios**: add members (spouse, parents…) and switch between each person's stocks and funds or a
+  Family total with a per-member breakdown; imports and manual adds go into whichever member you choose
+- **CAGR**: enter the date you first bought a holding to see its yearly growth, plus a money-weighted (XIRR-style)
+  CAGR for the whole portfolio
 - Price, % move, RSI and 52-week alerts; big-move alerts for watchlists; a daily digest
 
 ## How it works

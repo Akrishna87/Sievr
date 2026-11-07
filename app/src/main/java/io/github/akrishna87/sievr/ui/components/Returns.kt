@@ -42,10 +42,14 @@ fun ReturnsCard(
     dayPercent: Double?,
     footnote: String? = null,
     modifier: Modifier = Modifier,
+    label: String = "Current value",
+    /** Annualised return; pass [showCagr] true with null to explain how to get one. */
+    cagr: io.github.akrishna87.sievr.core.portfolio.Growth.Summary? = null,
+    showCagr: Boolean = false,
 ) {
     SievrCard(modifier.fillMaxWidth().padding(16.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Text("Current value", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(Fmt.price(value), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -53,6 +57,10 @@ fun ReturnsCard(
                 Stat("Total returns", signedMoney(gain), gainPercent?.let { Fmt.percent(it, true, 2) }, Modifier.weight(1f), colorFor = gain)
                 Stat("1-day returns", dayChange?.let { signedMoney(it) } ?: "—", dayPercent?.takeIf { dayChange != null }?.let { Fmt.percent(it, true, 2) },
                     Modifier.weight(1f), colorFor = dayChange)
+            }
+            if (showCagr) {
+                Spacer(Modifier.height(12.dp))
+                CagrLine(cagr)
             }
             if (value > 0 && invested > 0) {
                 Spacer(Modifier.height(14.dp))
@@ -64,6 +72,47 @@ fun ReturnsCard(
             }
         }
     }
+}
+
+@Composable
+private fun CagrLine(s: io.github.akrishna87.sievr.core.portfolio.Growth.Summary?) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("CAGR", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 10.dp))
+        when {
+            s == null -> Text("Add the date you bought each holding (tap Edit) to see yearly growth",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            s.cagr == null -> Text("Shows once your money has been invested about a year (since ${UserDate.monthYear(s.earliest)})",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else -> Column {
+                val c = s.cagr ?: 0.0
+                Text("${Fmt.percent(c, true, 2)} a year", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold, color = changeColor(c))
+                Text("since ${UserDate.monthYear(s.earliest)}" +
+                    (if (s.coverage < 99.5) " · counts ${Fmt.percent(s.coverage, decimals = 0)} of invested (holdings with a buy date)" else ""),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Buy dates typed as DD-MM-YYYY (or with / or .), stored as yyyy-MM-dd. */
+object UserDate {
+    private val shown = java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy")
+    private val month = java.time.format.DateTimeFormatter.ofPattern("MMM yyyy")
+    fun show(iso: String?): String = io.github.akrishna87.sievr.core.portfolio.Growth.parse(iso)?.format(shown) ?: ""
+    fun monthYear(d: java.time.LocalDate): String = d.format(month)
+    /** "" → null (no date); otherwise the ISO date, or [INVALID] if it can't be read or is in the future. */
+    fun parse(text: String): String? {
+        val t = text.trim()
+        if (t.isEmpty()) return null
+        val p = t.split('-', '/', '.', ' ').filter { it.isNotBlank() }.mapNotNull { it.toIntOrNull() }
+        if (p.size != 3) return INVALID
+        val year = if (p[2] < 100) 2000 + p[2] else p[2]
+        val d = runCatching { java.time.LocalDate.of(year, p[1], p[0]) }.getOrNull() ?: return INVALID
+        return if (d.isAfter(java.time.LocalDate.now()) || d.year < 1980) INVALID else d.toString()
+    }
+    const val INVALID = "invalid"
 }
 
 @Composable
@@ -113,6 +162,7 @@ fun HoldingRow(
     dayPercent: Double?,
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
+    cagr: Double? = null,
 ) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.Top) {
@@ -137,6 +187,7 @@ fun HoldingRow(
                 Text("Returns", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(signedMoney(gain), style = MaterialTheme.typography.bodyMedium, color = changeColor(gain), fontWeight = FontWeight.Medium)
                 gainPercent?.let { Text(Fmt.percent(it, true, 2), style = MaterialTheme.typography.bodySmall, color = changeColor(gain)) }
+                if (cagr != null) Text("CAGR ${Fmt.percent(cagr, true, 2)}", style = MaterialTheme.typography.labelSmall, color = changeColor(cagr))
                 if (dayPercent != null) Text("1D ${Fmt.percent(dayPercent, true, 2)}", style = MaterialTheme.typography.labelSmall, color = changeColor(dayPercent))
             }
         }

@@ -63,10 +63,14 @@ import io.github.akrishna87.sievr.ui.components.SectionHeader
 import io.github.akrishna87.sievr.ui.components.SievrCard
 import io.github.akrishna87.sievr.ui.components.changeColor
 import kotlinx.coroutines.launch
+import io.github.akrishna87.sievr.core.portfolio.Growth
+import io.github.akrishna87.sievr.data.FAMILY
+import io.github.akrishna87.sievr.data.Member
+import io.github.akrishna87.sievr.ui.components.UserDate
 
 /** Mutual fund holdings valued at the latest NAVs from AMFI, which refresh by themselves every business day. */
 @Composable
-fun MutualFundsTab() {
+fun MutualFundsTab(view: String, members: List<Member>, target: String, withOwner: (() -> Unit) -> Unit) {
     val app = SievrApp.instance
     val mf by app.mf.state.collectAsStateWithLifecycle()
     val user by app.user.data.collectAsStateWithLifecycle()
@@ -138,7 +142,29 @@ fun MutualFundsTab() {
         return
     }
 
-    val report = remember(user.mfHoldings, mf.byCode) { MutualFunds.analyze(user.mfHoldings, mf.byCode) }
+    val family = view == FAMILY
+    val mine = remember(user.mfHoldings, view) { if (family) user.mfHoldings else user.mfHoldings.filter { it.owner == view } }
+    val report = remember(mine, mf.byCode) { MutualFunds.analyze(if (family) MutualFunds.merge(mine) else mine, mf.byCode) }
+    // CAGR from each member's own funds and dates.
+    val growth = remember(mine, mf.byCode) {
+        val positions = if (family) MutualFunds.analyze(mine, mf.byCode).positions else report.positions
+        Growth.portfolio(positions.mapNotNull { p -> Growth.parse(p.holding.since)?.let { Growth.Lot(it, p.holding.invested, p.value) } },
+            positions.sumOf { it.holding.invested })
+    }
+    val breakdown = remember(mine, mf.byCode, members) {
+        if (!family) emptyList() else members.map { m ->
+            val r = MutualFunds.analyze(mine.filter { it.owner == m.id }, mf.byCode)
+            MemberTotals(m.name, r.value, r.invested)
+        }
+    }
+    val label = when {
+        members.size < 2 -> "Current value"
+        family -> "Family total · current value"
+        else -> (members.firstOrNull { it.id == view }?.name ?: "") + " · current value"
+    }
+    val targetName = members.firstOrNull { it.id == target }?.name?.takeIf { members.size > 1 }
+    val onAdd = { withOwner { searching = true } }
+    val onImport = { withOwner { pdfPicker.launch("*/*") } }
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -152,7 +178,7 @@ fun MutualFundsTab() {
             }
             mf.error?.let { Text(it, Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
-        if (user.mfHoldings.isEmpty()) {
+        if (mine.isEmpty()) {
             item {
                 EmptyState(
                     "Track your mutual funds",
@@ -160,13 +186,16 @@ fun MutualFundsTab() {
                         "with the latest NAV every business day. Your statement is read on this phone and never uploaded.",
                 )
             }
-            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("*/*") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
+            item { Actions(onAdd = onAdd, onPdf = onImport, onCsv = onImport, onHowTo = { howTo = true }) }
         } else {
-            item { Summary(report) }
-            item { Actions(onAdd = { searching = true }, onPdf = { pdfPicker.launch("*/*") }, onCsv = { importer.launch("*/*") }, onHowTo = { howTo = true }) }
+            item { Summary(report, label, growth) }
+            if (family) item { MemberBreakdown(breakdown) }
+            item { Actions(onAdd = onAdd, onPdf = onImport, onCsv = onImport, onHowTo = { howTo = true }) }
             item { SectionHeader("Funds (${report.positions.size})") }
             items(report.positions, key = { it.holding.code }) { p ->
-                FundRow(p) { editing = p.scheme to p.holding }
+                FundRow(p, cagr = if (family) null else Growth.cagr(p.holding.invested, p.value, Growth.parse(p.holding.since))) {
+                    if (!family) editing = p.scheme to p.holding
+                }
             }
             if (report.missing.isNotEmpty()) item {
                 Text("${report.missing.size} fund(s) no longer appear in AMFI's NAV list (merged or closed); they're shown at the amount invested.",
@@ -189,9 +218,9 @@ fun MutualFundsTab() {
 
     if (searching) SchemeSearch(data.schemes, onDismiss = { searching = false }) { s ->
         searching = false
-        editing = s to user.mfHoldings.firstOrNull { it.code == s.code }
+        editing = s to user.mfHoldings.firstOrNull { it.code == s.code && it.owner == target }
     }
-    editing?.let { (scheme, holding) -> FundDialog(scheme, holding) { editing = null } }
+    editing?.let { (scheme, holding) -> FundDialog(scheme, holding, holding?.owner ?: target) { editing = null } }
     importMessage?.let {
         AlertDialog(onDismissRequest = { importMessage = null }, title = { Text("Import") }, text = { Text(it) },
             confirmButton = { TextButton(onClick = { importMessage = null }) { Text("OK") } })
@@ -199,14 +228,14 @@ fun MutualFundsTab() {
     if (pdf != null) PasswordDialog(passwordError, reading, onDismiss = { pdf = null; passwordError = null }) { readPdf(it) }
     casResult?.let { r ->
         CasResultDialog(r, onDismiss = { casResult = null }) { replace ->
-            app.user.importMfHoldings(r.holdings, replace); casResult = null
+            app.user.importMfHoldings(r.holdings, replace, target); casResult = null
         }
     }
     if (howTo) HowToDialog { howTo = false }
     importResult?.let { r ->
         AlertDialog(
             onDismissRequest = { importResult = null },
-            title = { Text("Import ${r.holdings.size} funds?") },
+            title = { Text("Import ${r.holdings.size} funds" + (targetName?.let { " into $it's portfolio" } ?: "") + "?") },
             text = {
                 Text(
                     r.holdings.take(6).joinToString("\n") { "${it.name.take(40)}: ${Fmt.units(it.units)} units" } +
@@ -214,8 +243,8 @@ fun MutualFundsTab() {
                         (if (r.unmatched.isNotEmpty()) "\n\nNot found (add these by hand): " + r.unmatched.take(5).joinToString(", ") else ""),
                 )
             },
-            confirmButton = { TextButton(onClick = { app.user.importMfHoldings(r.holdings, replace = true); importResult = null }) { Text("Replace my funds") } },
-            dismissButton = { TextButton(onClick = { app.user.importMfHoldings(r.holdings, replace = false); importResult = null }) { Text("Add to them") } },
+            confirmButton = { TextButton(onClick = { app.user.importMfHoldings(r.holdings, replace = true, owner = target); importResult = null }) { Text("Replace my funds") } },
+            dismissButton = { TextButton(onClick = { app.user.importMfHoldings(r.holdings, replace = false, owner = target); importResult = null }) { Text("Add to them") } },
         )
     }
 }
@@ -323,13 +352,14 @@ private fun HowToDialog(onDismiss: () -> Unit) {
 private fun Modifier.androidxVerticalScroll(): Modifier = this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
 
 @Composable
-private fun Summary(r: MutualFunds.Report) {
+private fun Summary(r: MutualFunds.Report, label: String, growth: Growth.Summary?) {
     // A day's change needs yesterday's NAV; until the second night of NAVs there isn't one.
     val hasDay = r.positions.any { it.scheme?.prevNav != null }
     io.github.akrishna87.sievr.ui.components.ReturnsCard(
         value = r.value, invested = r.invested, gain = r.gain, gainPercent = r.gainPercent,
         dayChange = if (hasDay) r.dayChange else null, dayPercent = if (hasDay) r.dayChangePercent else null,
         footnote = if (hasDay) null else "1-day returns appear once two days of NAVs have been collected.",
+        label = label, cagr = growth, showCagr = true,
     )
 }
 
@@ -353,13 +383,13 @@ private fun Actions(onAdd: () -> Unit, onPdf: () -> Unit, onCsv: () -> Unit, onH
 }
 
 @Composable
-private fun FundRow(p: MutualFunds.Position, onClick: () -> Unit) {
+private fun FundRow(p: MutualFunds.Position, cagr: Double?, onClick: () -> Unit) {
     io.github.akrishna87.sievr.ui.components.HoldingRow(
         title = p.name,
         detail = "${Fmt.units(p.holding.units)} units · NAV ${p.scheme?.let { Fmt.nav(it.nav) } ?: "—"}" +
             (p.averageNav?.let { " · avg ${Fmt.nav(it)}" } ?: ""),
         invested = p.holding.invested, value = p.value, gain = p.gain, gainPercent = p.gainPercent,
-        dayPercent = p.scheme?.dayChangePercent, onClick = onClick,
+        dayPercent = p.scheme?.dayChangePercent, onClick = onClick, cagr = cagr,
     )
 }
 
@@ -397,12 +427,15 @@ private fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick:
 
 /** Units and amount invested for one fund; also shows what it's worth at today's NAV. */
 @Composable
-private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, onDismiss: () -> Unit) {
+private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, owner: String, onDismiss: () -> Unit) {
     val store = SievrApp.instance.user
     var units by remember { mutableStateOf(existing?.units?.let { Fmt.units(it) }?.replace(",", "") ?: "") }
     var invested by remember { mutableStateOf(existing?.invested?.let { "%.2f".format(java.util.Locale.US, it) } ?: "") }
+    var bought by remember { mutableStateOf(UserDate.show(existing?.since)) }
     val u = units.replace(",", "").toDoubleOrNull()
     val inv = invested.replace(",", "").toDoubleOrNull()
+    val since = UserDate.parse(bought)
+    val dateOk = since != UserDate.INVALID
     val code = scheme?.code ?: existing?.code ?: return
     val name = scheme?.name ?: existing?.name ?: "Scheme $code"
     AlertDialog(
@@ -416,8 +449,10 @@ private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, onDismiss: () ->
                 OutlinedTextField(invested, { invested = it }, label = { Text("Amount invested (₹)") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(Modifier.height(8.dp))
+                OutlinedTextField(bought, { bought = it }, label = { Text("First invested on (DD-MM-YYYY)") }, singleLine = true,
+                    isError = !dateOk, supportingText = { Text(if (dateOk) "Optional. Used for CAGR (for SIPs, the first instalment)" else "Use a past date like 15-04-2021") })
                 Text(
-                    "Both are on your account statement or fund app. For SIPs, use the total units and total amount invested so far.",
+                    "Units and amount are on your account statement or fund app. For SIPs, use the total units and total amount invested so far.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (scheme != null && u != null && u > 0) {
@@ -430,13 +465,13 @@ private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, onDismiss: () ->
             }
         },
         confirmButton = {
-            TextButton(enabled = u != null && u > 0 && inv != null && inv >= 0, onClick = {
-                store.setMfHolding(MfHolding(code, u!!, inv!!, name)); onDismiss()
+            TextButton(enabled = u != null && u > 0 && inv != null && inv >= 0 && dateOk, onClick = {
+                store.setMfHolding(MfHolding(code, u!!, inv!!, name, owner, since)); onDismiss()
             }) { Text("Save") }
         },
         dismissButton = {
             Row {
-                if (existing != null) TextButton(onClick = { store.removeMfHolding(code); onDismiss() }) { Text("Remove") }
+                if (existing != null) TextButton(onClick = { store.removeMfHolding(code, owner); onDismiss() }) { Text("Remove") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         },

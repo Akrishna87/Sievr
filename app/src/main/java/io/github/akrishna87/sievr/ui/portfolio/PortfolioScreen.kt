@@ -44,7 +44,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.akrishna87.sievr.SievrApp
 import io.github.akrishna87.sievr.core.model.Market
 import io.github.akrishna87.sievr.core.model.Stock
+import io.github.akrishna87.sievr.core.portfolio.Growth
 import io.github.akrishna87.sievr.core.portfolio.Holding
+import io.github.akrishna87.sievr.data.FAMILY
+import io.github.akrishna87.sievr.data.Member
+import io.github.akrishna87.sievr.ui.components.UserDate
 import io.github.akrishna87.sievr.core.portfolio.PortfolioAnalyzer
 import io.github.akrishna87.sievr.ui.LocalNav
 import io.github.akrishna87.sievr.ui.components.BarList
@@ -76,6 +80,18 @@ fun PortfolioScreen() {
     var reading by remember { mutableStateOf(false) }
     var shareResult by remember { mutableStateOf<io.github.akrishna87.sievr.core.portfolio.ShareStatement.Result?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val members = user.members
+    // With one member there's no family total: everything is that member's.
+    val view = if (members.size == 1) members.first().id
+        else user.portfolioView.takeIf { v -> v == FAMILY || members.any { it.id == v } } ?: FAMILY
+    val family = view == FAMILY
+    // Whose portfolio the next add or import goes into.
+    var target by remember { mutableStateOf(view) }
+    var askOwner by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun withOwner(action: () -> Unit) {
+        if (!family) { target = view; action() } else askOwner = action
+    }
+    val memberName = members.firstOrNull { it.id == target }?.name
     fun readPdf(password: String) {
         val uri = pdf ?: return
         val market = SievrApp.instance.market.market ?: return
@@ -116,13 +132,15 @@ fun PortfolioScreen() {
     }
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) onPicked(uri) }
     val importer = pdfPicker
+    val launchImport = { withOwner { pdfPicker.launch("*/*") } }
+    val startAdd = { withOwner { picking = true } }
 
     Scaffold(topBar = {
         TopAppBar(title = { Text("Portfolio") }, actions = {
             if (tab == 0) {
-                IconButton(onClick = { pdfPicker.launch("*/*") }) { Icon(Icons.Default.FileUpload, "Import a statement PDF or broker report") }
-                IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.Description, "Import broker report (Excel or CSV)") }
-                IconButton(onClick = { picking = true }) { Icon(Icons.Default.Add, "Add holding") }
+                IconButton(onClick = launchImport) { Icon(Icons.Default.FileUpload, "Import a statement PDF or broker report") }
+                IconButton(onClick = launchImport) { Icon(Icons.Default.Description, "Import broker report (Excel or CSV)") }
+                IconButton(onClick = startAdd) { Icon(Icons.Default.Add, "Add holding") }
             }
         })
     }) { padding ->
@@ -131,30 +149,36 @@ fun PortfolioScreen() {
                 androidx.compose.material3.Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Stocks") })
                 androidx.compose.material3.Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Mutual funds") })
             }
-            if (tab == 1) MutualFundsTab()
+            MemberBar(members, view)
+            if (tab == 1) MutualFundsTab(view, members, target) { withOwner(it) }
             else WithMarket { market ->
-                if (user.holdings.isEmpty()) {
+                val mine = if (family) user.holdings else user.holdings.filter { it.owner == view }
+                if (mine.isEmpty()) {
                     Column {
                         EmptyState("Track your shares", "Import your demat statement (NSDL or CDSL CAS PDF) to bring in every share at once, " +
                             "or import your broker's holdings report (Excel or CSV, e.g. Groww's Stocks_Holdings file), or add shares by hand. Sievr shows your gains, sector mix, weighted P/E and ROE, " +
                             "expected dividends and red flags. Everything stays on this phone.")
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                            androidx.compose.material3.Button(onClick = { pdfPicker.launch("*/*") }, Modifier.weight(1f)) { Text("Import statement") }
-                            androidx.compose.material3.OutlinedButton(onClick = { picking = true }, Modifier.weight(1f)) { Text("Add stock") }
+                            androidx.compose.material3.Button(onClick = launchImport, Modifier.weight(1f)) { Text("Import statement") }
+                            androidx.compose.material3.OutlinedButton(onClick = startAdd, Modifier.weight(1f)) { Text("Add stock") }
                         }
-                        TextButton(onClick = { importer.launch("*/*") }, Modifier.padding(horizontal = 8.dp)) { Text("Use your broker's report, Excel or CSV (has your buy prices)") }
+                        TextButton(onClick = launchImport, Modifier.padding(horizontal = 8.dp)) { Text("Use your broker's report, Excel or CSV (has your buy prices)") }
                     }
-                } else PortfolioBody(user.holdings, market) { h -> editing = h.symbol to h }
-                if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add a holding", recent = user.recentSymbols) {
+                } else PortfolioBody(mine, market, family, members, view) { h -> target = h.owner; editing = h.symbol to h }
+                if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add a holding" + (memberName?.takeIf { members.size > 1 }?.let { " for $it" } ?: ""),
+                    recent = user.recentSymbols) {
                     picking = false
-                    editing = it.symbol to user.holdings.firstOrNull { h -> h.symbol == it.symbol }
+                    editing = it.symbol to user.holdings.firstOrNull { h -> h.symbol == it.symbol && h.owner == target }
                 }
-                editing?.let { (sym, existing) -> HoldingDialog(sym, existing, market[sym]) { editing = null } }
+                editing?.let { (sym, existing) -> HoldingDialog(sym, existing, market[sym], existing?.owner ?: target) { editing = null } }
             }
         }
     }
+    askOwner?.let { action ->
+        OwnerPickerDialog(members, onDismiss = { askOwner = null }) { id -> target = id; askOwner = null; action() }
+    }
     if (pdf != null) PasswordDialog(passwordError, reading, onDismiss = { pdf = null; passwordError = null }) { readPdf(it) }
-    shareResult?.let { r -> ShareResultDialog(r, onDismiss = { shareResult = null }) { replace -> store.importHoldings(r.holdings, replace); shareResult = null } }
+    shareResult?.let { r -> ShareResultDialog(r, onDismiss = { shareResult = null }) { replace -> store.importHoldings(r.holdings, replace, target); shareResult = null } }
     importMessage?.let {
         AlertDialog(onDismissRequest = { importMessage = null }, title = { Text("Import") }, text = { Text(it) },
             confirmButton = { TextButton(onClick = { importMessage = null }) { Text("OK") } })
@@ -162,30 +186,50 @@ fun PortfolioScreen() {
     if (pendingImport.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { pendingImport = emptyList() },
-            title = { Text("Import ${pendingImport.size} holdings?") },
+            title = { Text("Import ${pendingImport.size} holdings" + (memberName?.takeIf { members.size > 1 }?.let { " into $it's portfolio" } ?: "") + "?") },
             text = {
                 Text(pendingImport.take(8).joinToString("\n") { "${it.symbol}: ${Fmt.number(it.quantity, 0)} @ ${Fmt.price(it.averageCost)}" } +
                     (if (pendingImport.size > 8) "\n…and ${pendingImport.size - 8} more" else "") +
                     (if (pendingUnmatched.isNotEmpty()) "\n\nNot in Sievr's market data, so skipped: " + pendingUnmatched.take(5).joinToString(", ") else ""))
             },
-            confirmButton = { TextButton(onClick = { store.importHoldings(pendingImport, replace = true); pendingImport = emptyList() }) { Text("Replace portfolio") } },
-            dismissButton = { TextButton(onClick = { store.importHoldings(pendingImport, replace = false); pendingImport = emptyList() }) { Text("Add to it") } },
+            confirmButton = { TextButton(onClick = { store.importHoldings(pendingImport, replace = true, owner = target); pendingImport = emptyList() }) { Text("Replace" + (memberName?.takeIf { members.size > 1 }?.let { " $it's" } ?: "") + " stocks") } },
+            dismissButton = { TextButton(onClick = { store.importHoldings(pendingImport, replace = false, owner = target); pendingImport = emptyList() }) { Text("Add to it") } },
         )
     }
 }
 
 @Composable
-private fun PortfolioBody(holdings: List<Holding>, market: Market, onEdit: (Holding) -> Unit) {
+private fun PortfolioBody(raw: List<Holding>, market: Market, family: Boolean, members: List<Member>, view: String, onEdit: (Holding) -> Unit) {
     val nav = LocalNav.current
+    val holdings = remember(raw, family) { if (family) PortfolioAnalyzer.merge(raw) else raw }
     val r = remember(holdings, market) { PortfolioAnalyzer.analyze(holdings, market) }
+    // CAGR from each member's own lots and dates, not the merged ones.
+    val growth = remember(raw, market) {
+        val positions = if (family) PortfolioAnalyzer.analyze(raw, market).positions else r.positions
+        Growth.portfolio(positions.mapNotNull { p -> Growth.parse(p.holding.since)?.let { Growth.Lot(it, p.cost, p.value) } },
+            positions.sumOf { it.cost })
+    }
+    val breakdown = remember(raw, market, family) {
+        if (!family) emptyList() else members.map { m ->
+            val mr = PortfolioAnalyzer.analyze(raw.filter { it.owner == m.id }, market)
+            MemberTotals(m.name, mr.value, mr.cost)
+        }
+    }
+    val label = when {
+        members.size < 2 -> "Current value"
+        family -> "Family total · current value"
+        else -> (members.firstOrNull { it.id == view }?.name ?: "") + " · current value"
+    }
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             io.github.akrishna87.sievr.ui.components.ReturnsCard(
                 value = r.value, invested = r.cost, gain = r.gain, gainPercent = r.gainPercent,
                 dayChange = r.dayChange, dayPercent = r.dayChangePercent,
                 footnote = "Expected dividends ≈ ${Fmt.price(r.annualDividends)} a year",
+                label = label, cagr = growth, showCagr = true,
             )
         }
+        if (family) item { MemberBreakdown(breakdown) }
         if (r.warnings.isNotEmpty()) item {
             SectionHeader("Worth a look")
             Column(Modifier.padding(horizontal = 16.dp)) {
@@ -199,8 +243,9 @@ private fun PortfolioBody(holdings: List<Holding>, market: Market, onEdit: (Hold
                 detail = "${Fmt.number(p.holding.quantity, 0)} shares · avg ${Fmt.price(p.holding.averageCost)} · now ${Fmt.price(p.price)} · ${Fmt.percent(p.weight, decimals = 1)} of portfolio",
                 invested = p.cost, value = p.value, gain = p.gain, gainPercent = p.gainPercent,
                 dayPercent = p.stock?.get("chg1d"),
-                onClick = { if (p.stock != null) nav.stock(p.holding.symbol) else onEdit(p.holding) },
-                trailing = { TextButton(onClick = { onEdit(p.holding) }) { Text("Edit") } },
+                onClick = { if (p.stock != null) nav.stock(p.holding.symbol) else if (!family) onEdit(p.holding) },
+                trailing = if (family) null else ({ TextButton(onClick = { onEdit(p.holding) }) { Text("Edit") } }),
+                cagr = if (family) null else Growth.cagr(p.cost, p.value, Growth.parse(p.holding.since)),
             )
         }
         item {
@@ -244,12 +289,15 @@ private fun PortfolioBody(holdings: List<Holding>, market: Market, onEdit: (Hold
 }
 
 @Composable
-private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, onDismiss: () -> Unit) {
+private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, owner: String, onDismiss: () -> Unit) {
     val store = SievrApp.instance.user
     var qty by remember { mutableStateOf(existing?.quantity?.let { Fmt.number(it, 0) } ?: "") }
     var avg by remember { mutableStateOf(existing?.averageCost?.let { "%.2f".format(it) } ?: stock?.get("price")?.let { "%.2f".format(it) } ?: "") }
+    var bought by remember { mutableStateOf(UserDate.show(existing?.since)) }
     val q = qty.replace(",", "").toDoubleOrNull()
     val a = avg.replace(",", "").toDoubleOrNull()
+    val since = UserDate.parse(bought)
+    val dateOk = since != UserDate.INVALID
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(symbol) },
@@ -258,14 +306,16 @@ private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, onD
                 OutlinedTextField(qty, { qty = it }, label = { Text("Quantity") }, singleLine = true)
                 Spacer(Modifier.width(8.dp))
                 OutlinedTextField(avg, { avg = it }, label = { Text("Average buy price (₹)") }, singleLine = true)
+                OutlinedTextField(bought, { bought = it }, label = { Text("First bought on (DD-MM-YYYY)") }, singleLine = true,
+                    isError = !dateOk, supportingText = { Text(if (dateOk) "Optional. Used for CAGR" else "Use a past date like 15-04-2021") })
             }
         },
         confirmButton = {
-            TextButton(enabled = q != null && q > 0 && a != null && a >= 0, onClick = { store.setHolding(Holding(symbol, q!!, a!!)); onDismiss() }) { Text("Save") }
+            TextButton(enabled = q != null && q > 0 && a != null && a >= 0 && dateOk, onClick = { store.setHolding(Holding(symbol, q!!, a!!, owner, since)); onDismiss() }) { Text("Save") }
         },
         dismissButton = {
             Row {
-                if (existing != null) TextButton(onClick = { store.removeHolding(symbol); onDismiss() }) { Text("Remove") }
+                if (existing != null) TextButton(onClick = { store.removeHolding(symbol, owner); onDismiss() }) { Text("Remove") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
             }
         },

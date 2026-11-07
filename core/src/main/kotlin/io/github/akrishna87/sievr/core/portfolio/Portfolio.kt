@@ -5,7 +5,18 @@ import io.github.akrishna87.sievr.core.model.Stock
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Holding(val symbol: String, val quantity: Double, val averageCost: Double)
+data class Holding(
+    val symbol: String,
+    val quantity: Double,
+    val averageCost: Double,
+    /** Whose holding this is (a family member's id). Older saved data has none, so it belongs to "me". */
+    val owner: String = DEFAULT_OWNER,
+    /** When it was first bought, "yyyy-MM-dd", for CAGR. Optional: statements and broker reports don't carry it. */
+    val since: String? = null,
+)
+
+/** The member everything belongs to until more family members are added. */
+const val DEFAULT_OWNER = "me"
 
 /** Portfolio X-ray: value, gains, sector mix, weighted fundamentals, scores and risk. */
 object PortfolioAnalyzer {
@@ -51,6 +62,13 @@ object PortfolioAnalyzer {
         "pe", "pb", "roe", "roce", "de", "divYield", "beta", "salesCagr3", "profitCagr3",
         "qualityScore", "valueScore", "growthScore", "momentumScore", "safetyScore", "sievrScore", "ret1y", "volatility",
     )
+
+    /** Everyone's holdings of the same stock as one: quantities added, average cost weighted by quantity. */
+    fun merge(holdings: List<Holding>): List<Holding> = holdings.groupBy { it.symbol }.map { (sym, list) ->
+        val q = list.sumOf { it.quantity }
+        Holding(sym, q, if (q > 0) list.sumOf { it.quantity * it.averageCost } / q else 0.0, owner = "all",
+            since = list.mapNotNull { it.since }.minOrNull())
+    }
 
     fun analyze(holdings: List<Holding>, market: Market): Report {
         val raw = holdings.map { h ->

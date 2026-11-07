@@ -23,12 +23,23 @@ import java.util.UUID
 @Serializable
 data class Watchlist(val id: String, val name: String, val symbols: List<String> = emptyList())
 
+/** A family member whose stocks and funds are tracked separately. */
+@Serializable
+data class Member(val id: String, val name: String)
+
+/** The Portfolio view that shows everyone together. */
+const val FAMILY = "all"
+
 @Serializable
 data class UserData(
     val screens: List<Screen> = emptyList(),
     val watchlists: List<Watchlist> = listOf(Watchlist("default", "Watchlist")),
     val holdings: List<Holding> = emptyList(),
     val mfHoldings: List<MfHolding> = emptyList(),
+    /** Family members; holdings belong to one by id. Starts with just "Me". */
+    val members: List<Member> = listOf(Member(io.github.akrishna87.sievr.core.portfolio.DEFAULT_OWNER, "Me")),
+    /** The Portfolio view last chosen: a member's id, or FAMILY for everyone together. */
+    val portfolioView: String = FAMILY,
     val priceAlerts: List<PriceAlert> = emptyList(),
     /** Last results of each screen with alerts on, to find what entered and left. */
     val screenMatches: Map<String, Set<String>> = emptyMap(),
@@ -115,28 +126,62 @@ class UserStore(context: Context) {
     // ---- portfolio
 
     fun setHolding(holding: Holding) = update { d ->
-        d.copy(holdings = d.holdings.filterNot { it.symbol == holding.symbol } + holding)
+        d.copy(holdings = d.holdings.filterNot { it.symbol == holding.symbol && it.owner == holding.owner } + holding)
     }
 
-    fun removeHolding(symbol: String) = update { d -> d.copy(holdings = d.holdings.filterNot { it.symbol == symbol }) }
+    fun removeHolding(symbol: String, owner: String) = update { d ->
+        d.copy(holdings = d.holdings.filterNot { it.symbol == symbol && it.owner == owner })
+    }
 
-    fun importHoldings(holdings: List<Holding>, replace: Boolean) = update { d ->
-        val base = if (replace) emptyList() else d.holdings.filterNot { h -> holdings.any { it.symbol == h.symbol } }
-        d.copy(holdings = base + holdings)
+    /** Imports into one member's portfolio; "replace" clears only that member's stocks. */
+    fun importHoldings(holdings: List<Holding>, replace: Boolean, owner: String) = update { d ->
+        // A fresh statement has no buy dates, so keep the ones typed in before.
+        val incoming = holdings.map { h -> h.copy(owner = owner, since = h.since ?: d.holdings.firstOrNull { it.owner == owner && it.symbol == h.symbol }?.since) }
+        val others = d.holdings.filterNot { it.owner == owner }
+        val mine = if (replace) emptyList() else d.holdings.filter { h -> h.owner == owner && incoming.none { it.symbol == h.symbol } }
+        d.copy(holdings = others + mine + incoming)
     }
 
     // ---- mutual funds
 
     fun setMfHolding(holding: MfHolding) = update { d ->
-        d.copy(mfHoldings = d.mfHoldings.filterNot { it.code == holding.code } + holding)
+        d.copy(mfHoldings = d.mfHoldings.filterNot { it.code == holding.code && it.owner == holding.owner } + holding)
     }
 
-    fun removeMfHolding(code: Int) = update { d -> d.copy(mfHoldings = d.mfHoldings.filterNot { it.code == code }) }
-
-    fun importMfHoldings(holdings: List<MfHolding>, replace: Boolean) = update { d ->
-        val base = if (replace) emptyList() else d.mfHoldings.filterNot { h -> holdings.any { it.code == h.code } }
-        d.copy(mfHoldings = base + holdings)
+    fun removeMfHolding(code: Int, owner: String) = update { d ->
+        d.copy(mfHoldings = d.mfHoldings.filterNot { it.code == code && it.owner == owner })
     }
+
+    /** Imports into one member's funds; "replace" clears only that member's funds. */
+    fun importMfHoldings(holdings: List<MfHolding>, replace: Boolean, owner: String) = update { d ->
+        val incoming = holdings.map { h -> h.copy(owner = owner, since = h.since ?: d.mfHoldings.firstOrNull { it.owner == owner && it.code == h.code }?.since) }
+        val others = d.mfHoldings.filterNot { it.owner == owner }
+        val mine = if (replace) emptyList() else d.mfHoldings.filter { h -> h.owner == owner && incoming.none { it.code == h.code } }
+        d.copy(mfHoldings = others + mine + incoming)
+    }
+
+    // ---- family members
+
+    fun addMember(name: String): String {
+        val id = UUID.randomUUID().toString()
+        update { it.copy(members = it.members + Member(id, name), portfolioView = id) }
+        return id
+    }
+
+    fun renameMember(id: String, name: String) = update { d -> d.copy(members = d.members.map { if (it.id == id) it.copy(name = name) else it }) }
+
+    /** Removes a member and their holdings; the last member can't be removed. */
+    fun removeMember(id: String) = update { d ->
+        if (d.members.size <= 1) d
+        else d.copy(
+            members = d.members.filterNot { it.id == id },
+            holdings = d.holdings.filterNot { it.owner == id },
+            mfHoldings = d.mfHoldings.filterNot { it.owner == id },
+            portfolioView = FAMILY,
+        )
+    }
+
+    fun setPortfolioView(view: String) = update { it.copy(portfolioView = view) }
 
     // ---- alerts
 

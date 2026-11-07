@@ -62,6 +62,10 @@ data class MfHolding(
     val invested: Double,
     /** Kept so the holding still shows sensibly if a scheme stops appearing in AMFI's list. */
     val name: String = "",
+    /** Whose holding this is (a family member's id); older saved data belongs to "me". */
+    val owner: String = io.github.akrishna87.sievr.core.portfolio.DEFAULT_OWNER,
+    /** When it was first bought, "yyyy-MM-dd", for CAGR. Optional. */
+    val since: String? = null,
 )
 
 object MutualFunds {
@@ -95,6 +99,12 @@ object MutualFunds {
         val navDate: String?,
         val missing: List<MfHolding>,
     )
+
+    /** Everyone's units of the same scheme as one holding. */
+    fun merge(holdings: List<MfHolding>): List<MfHolding> = holdings.groupBy { it.code }.map { (code, list) ->
+        MfHolding(code, list.sumOf { it.units }, list.sumOf { it.invested }, list.first().name, owner = "all",
+            since = list.mapNotNull { it.since }.minOrNull())
+    }
 
     fun analyze(holdings: List<MfHolding>, schemes: Map<Int, MfScheme>): Report {
         val raw = holdings.map { h ->
