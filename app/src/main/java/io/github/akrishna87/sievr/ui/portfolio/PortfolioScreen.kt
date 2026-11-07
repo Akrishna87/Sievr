@@ -133,7 +133,7 @@ fun PortfolioScreen() {
                 if (user.holdings.isEmpty()) {
                     Column {
                         EmptyState("Track your shares", "Import your demat statement (NSDL or CDSL CAS PDF) to bring in every share at once, " +
-                            "or import your broker's holdings CSV, or add shares by hand. Sievr shows your gains, sector mix, weighted P/E and ROE, " +
+                            "or import your broker's holdings report (Excel or CSV, e.g. Groww's Stocks_Holdings file), or add shares by hand. Sievr shows your gains, sector mix, weighted P/E and ROE, " +
                             "expected dividends and red flags. Everything stays on this phone.")
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                             androidx.compose.material3.Button(onClick = { pdfPicker.launch("application/pdf") }, Modifier.weight(1f)) { Text("Import statement") }
