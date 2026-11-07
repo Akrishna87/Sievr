@@ -2,6 +2,7 @@ package io.github.akrishna87.sievr.data
 
 import android.content.Context
 import io.github.akrishna87.sievr.core.alerts.PriceAlert
+import io.github.akrishna87.sievr.core.mf.MfHolding
 import io.github.akrishna87.sievr.core.portfolio.Holding
 import io.github.akrishna87.sievr.core.screen.Screen
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +28,7 @@ data class UserData(
     val screens: List<Screen> = emptyList(),
     val watchlists: List<Watchlist> = listOf(Watchlist("default", "Watchlist")),
     val holdings: List<Holding> = emptyList(),
+    val mfHoldings: List<MfHolding> = emptyList(),
     val priceAlerts: List<PriceAlert> = emptyList(),
     /** Last results of each screen with alerts on, to find what entered and left. */
     val screenMatches: Map<String, Set<String>> = emptyMap(),
@@ -117,6 +119,19 @@ class UserStore(context: Context) {
     fun importHoldings(holdings: List<Holding>, replace: Boolean) = update { d ->
         val base = if (replace) emptyList() else d.holdings.filterNot { h -> holdings.any { it.symbol == h.symbol } }
         d.copy(holdings = base + holdings)
+    }
+
+    // ---- mutual funds
+
+    fun setMfHolding(holding: MfHolding) = update { d ->
+        d.copy(mfHoldings = d.mfHoldings.filterNot { it.code == holding.code } + holding)
+    }
+
+    fun removeMfHolding(code: Int) = update { d -> d.copy(mfHoldings = d.mfHoldings.filterNot { it.code == code }) }
+
+    fun importMfHoldings(holdings: List<MfHolding>, replace: Boolean) = update { d ->
+        val base = if (replace) emptyList() else d.mfHoldings.filterNot { h -> holdings.any { it.code == h.code } }
+        d.copy(mfHoldings = base + holdings)
     }
 
     // ---- alerts

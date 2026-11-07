@@ -66,6 +66,7 @@ fun PortfolioScreen() {
     var editing by remember { mutableStateOf<Pair<String, Holding?>?>(null) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<List<Holding>>(emptyList()) }
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -77,12 +78,19 @@ fun PortfolioScreen() {
 
     Scaffold(topBar = {
         TopAppBar(title = { Text("Portfolio") }, actions = {
-            IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.FileUpload, "Import broker CSV") }
-            IconButton(onClick = { picking = true }) { Icon(Icons.Default.Add, "Add holding") }
+            if (tab == 0) {
+                IconButton(onClick = { importer.launch("*/*") }) { Icon(Icons.Default.FileUpload, "Import broker CSV") }
+                IconButton(onClick = { picking = true }) { Icon(Icons.Default.Add, "Add holding") }
+            }
         })
     }) { padding ->
         Column(Modifier.padding(padding)) {
-            WithMarket { market ->
+            androidx.compose.material3.TabRow(selectedTabIndex = tab) {
+                androidx.compose.material3.Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Stocks") })
+                androidx.compose.material3.Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Mutual funds") })
+            }
+            if (tab == 1) MutualFundsTab()
+            else WithMarket { market ->
                 if (user.holdings.isEmpty()) {
                     EmptyState("Track your portfolio", "Add holdings by hand or import your broker's holdings CSV. Sievr shows your gains, sector mix, " +
                         "weighted P/E and ROE, expected dividends, concentration and red flags. Everything stays on this phone.", "Add a holding") { picking = true }

@@ -24,6 +24,7 @@ class DailyUpdateWorker(context: Context, params: WorkerParameters) : CoroutineW
             if (app.updates.shouldNotify(v)) Notifier.showUpdate(applicationContext, v.versionName, app.updates.apkUrl)
         }
         app.market.refresh(force = false)
+        if (app.user.data.value.mfHoldings.isNotEmpty()) app.mf.refresh()
         val market = app.market.market ?: return Result.retry()
         evaluate(applicationContext, market, app.user)
         return Result.success()

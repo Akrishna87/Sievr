@@ -33,12 +33,15 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 - Multiple watchlists with custom columns
 - Portfolio X-ray: import a broker CSV (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
   expected dividends, concentration and red flags (pledges, distress, over-concentration)
+- Mutual funds: add funds by name (or import a holdings CSV) with units and amount invested; values refresh with AMFI's
+  NAVs every business day, with gains, the last day's change, and asset, category and fund-house mix
 - Price, % move, RSI and 52-week alerts; big-move alerts for watchlists; a daily digest
 
 ## How it works
 
 ```
 pipeline/          Python, runs on GitHub Actions every weekday 19:15 IST
+  build_mf.py         mutual fund NAVs from AMFI (nightly, own workflow)
   build_snapshot.py   NSE listings + index lists, BSE's daily bhavcopy (for BSE-only companies and BSE codes),
                       Yahoo Finance prices and fundamentals
   shareholding.py     quarterly shareholding patterns from NSE's XBRL filings

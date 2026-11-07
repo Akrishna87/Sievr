@@ -121,7 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     if os.path.exists(args.previous):
         with gzip.open(args.previous, "rb") as f:
             schemes = with_previous(schemes, json.loads(f.read()).get("schemes", []))
-    latest = max(s["date"] for s in schemes)
+    # The date most schemes carry; a few overnight funds post next-day NAVs.
+    from collections import Counter
+    latest = Counter(s["date"] for s in schemes).most_common(1)[0][0]
     data = {"version": 1, "asOf": latest, "generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
             "source": "AMFI", "schemes": schemes}
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
