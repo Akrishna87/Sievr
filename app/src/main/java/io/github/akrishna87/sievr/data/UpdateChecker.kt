@@ -41,14 +41,19 @@ class UpdateChecker(context: Context) {
         newer
     }
 
-    /** True the first time a given version is seen, so it's only notified once. */
-    fun shouldNotify(version: AppVersion): Boolean {
+    /**
+     * True the first time a given version is seen, and at most once every few days: on a day with several
+     * builds, people get one notification, not one per build. The Update bar in the app still shows at once.
+     */
+    fun shouldNotify(version: AppVersion, now: Long = System.currentTimeMillis()): Boolean {
         if (prefs.getInt("notified", 0) >= version.versionCode) return false
-        prefs.edit().putInt("notified", version.versionCode).apply()
+        if (now - prefs.getLong("notifiedAt", 0L) < QUIET_MS) return false
+        prefs.edit().putInt("notified", version.versionCode).putLong("notifiedAt", now).apply()
         return true
     }
 
     companion object {
+        private const val QUIET_MS = 3L * 24 * 60 * 60 * 1000
         const val RELEASE = "https://github.com/Akrishna87/Sievr/releases/download/app-latest/"
     }
 }
