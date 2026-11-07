@@ -167,7 +167,6 @@ fun MutualFundsTab() {
             item { SectionHeader("Funds (${report.positions.size})") }
             items(report.positions, key = { it.holding.code }) { p ->
                 FundRow(p) { editing = p.scheme to p.holding }
-                HorizontalDivider()
             }
             if (report.missing.isNotEmpty()) item {
                 Text("${report.missing.size} fund(s) no longer appear in AMFI's NAV list (merged or closed); they're shown at the amount invested.",
@@ -325,22 +324,13 @@ private fun Modifier.androidxVerticalScroll(): Modifier = this.then(Modifier.ver
 
 @Composable
 private fun Summary(r: MutualFunds.Report) {
-    SievrCard(Modifier.fillMaxWidth().padding(16.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Text("Current value", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(Fmt.price(r.value), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Row {
-                Text("Total ${if (r.gain >= 0) "gain" else "loss"} ${Fmt.price(kotlin.math.abs(r.gain))} ", color = changeColor(r.gain))
-                ChangeText(r.gainPercent)
-            }
-            Row {
-                Text("Last day ${if (r.dayChange >= 0) "+" else "−"}${Fmt.price(kotlin.math.abs(r.dayChange))} ", color = changeColor(r.dayChange),
-                    style = MaterialTheme.typography.bodySmall)
-                Text(Fmt.percent(r.dayChangePercent, true, 2), color = changeColor(r.dayChangePercent), style = MaterialTheme.typography.bodySmall)
-            }
-            Text("Invested ${Fmt.price(r.invested)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+    // A day's change needs yesterday's NAV; until the second night of NAVs there isn't one.
+    val hasDay = r.positions.any { it.scheme?.prevNav != null }
+    io.github.akrishna87.sievr.ui.components.ReturnsCard(
+        value = r.value, invested = r.invested, gain = r.gain, gainPercent = r.gainPercent,
+        dayChange = if (hasDay) r.dayChange else null, dayPercent = if (hasDay) r.dayChangePercent else null,
+        footnote = if (hasDay) null else "1-day returns appear once two days of NAVs have been collected.",
+    )
 }
 
 @Composable
@@ -364,22 +354,13 @@ private fun Actions(onAdd: () -> Unit, onPdf: () -> Unit, onCsv: () -> Unit, onH
 
 @Composable
 private fun FundRow(p: MutualFunds.Position, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(p.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(
-                "${Fmt.number(p.holding.units, 3)} units · NAV ${p.scheme?.let { Fmt.price(it.nav) } ?: "—"}" +
-                    (p.averageNav?.let { " · avg ${Fmt.price(it)}" } ?: ""),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(Fmt.price(p.value), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text(Fmt.percent(p.gainPercent, true), style = MaterialTheme.typography.bodySmall, color = changeColor(p.gainPercent))
-            p.scheme?.dayChangePercent?.let { Text("day ${Fmt.percent(it, true, 2)}", style = MaterialTheme.typography.labelSmall, color = changeColor(it)) }
-        }
-    }
+    io.github.akrishna87.sievr.ui.components.HoldingRow(
+        title = p.name,
+        detail = "${Fmt.number(p.holding.units, 3)} units · NAV ${p.scheme?.let { Fmt.price(it.nav) } ?: "—"}" +
+            (p.averageNav?.let { " · avg ${Fmt.price(it)}" } ?: ""),
+        invested = p.holding.invested, value = p.value, gain = p.gain, gainPercent = p.gainPercent,
+        dayPercent = p.scheme?.dayChangePercent, onClick = onClick,
+    )
 }
 
 @Composable

@@ -180,23 +180,11 @@ private fun PortfolioBody(holdings: List<Holding>, market: Market, onEdit: (Hold
     val r = remember(holdings, market) { PortfolioAnalyzer.analyze(holdings, market) }
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            SievrCard(Modifier.fillMaxWidth().padding(16.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Current value", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Fmt.price(r.value), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Row {
-                        Text("Total ${if (r.gain >= 0) "gain" else "loss"} ${Fmt.price(kotlin.math.abs(r.gain))} ", color = changeColor(r.gain))
-                        ChangeText(r.gainPercent)
-                    }
-                    Row {
-                        Text("Today ${if (r.dayChange >= 0) "+" else "−"}${Fmt.price(kotlin.math.abs(r.dayChange))} ", color = changeColor(r.dayChange),
-                            style = MaterialTheme.typography.bodySmall)
-                        Text(Fmt.percent(r.dayChangePercent, true, 2), color = changeColor(r.dayChangePercent), style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text("Invested ${Fmt.price(r.cost)} · Dividends ≈ ${Fmt.price(r.annualDividends)} a year", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+            io.github.akrishna87.sievr.ui.components.ReturnsCard(
+                value = r.value, invested = r.cost, gain = r.gain, gainPercent = r.gainPercent,
+                dayChange = r.dayChange, dayPercent = r.dayChangePercent,
+                footnote = "Expected dividends ≈ ${Fmt.price(r.annualDividends)} a year",
+            )
         }
         if (r.warnings.isNotEmpty()) item {
             SectionHeader("Worth a look")
@@ -206,23 +194,14 @@ private fun PortfolioBody(holdings: List<Holding>, market: Market, onEdit: (Hold
         }
         item { SectionHeader("Holdings") }
         items(r.positions, key = { it.holding.symbol }) { p ->
-            Row(
-                Modifier.fillMaxWidth().clickable { if (p.stock != null) nav.stock(p.holding.symbol) else onEdit(p.holding) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(p.holding.symbol, style = MaterialTheme.typography.titleSmall)
-                    Text("${Fmt.number(p.holding.quantity, 0)} @ ${Fmt.price(p.holding.averageCost)} · ${Fmt.percent(p.weight, decimals = 1)}",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(Fmt.price(p.value), style = MaterialTheme.typography.bodyMedium)
-                    Text(Fmt.percent(p.gainPercent, true), style = MaterialTheme.typography.bodySmall, color = changeColor(p.gainPercent))
-                }
-                TextButton(onClick = { onEdit(p.holding) }) { Text("Edit") }
-            }
-            HorizontalDivider()
+            io.github.akrishna87.sievr.ui.components.HoldingRow(
+                title = p.holding.symbol + (p.stock?.name?.let { " · $it" } ?: ""),
+                detail = "${Fmt.number(p.holding.quantity, 0)} shares · avg ${Fmt.price(p.holding.averageCost)} · now ${Fmt.price(p.price)} · ${Fmt.percent(p.weight, decimals = 1)} of portfolio",
+                invested = p.cost, value = p.value, gain = p.gain, gainPercent = p.gainPercent,
+                dayPercent = p.stock?.get("chg1d"),
+                onClick = { if (p.stock != null) nav.stock(p.holding.symbol) else onEdit(p.holding) },
+                trailing = { TextButton(onClick = { onEdit(p.holding) }) { Text("Edit") } },
+            )
         }
         item {
             SectionHeader("Sector mix")
