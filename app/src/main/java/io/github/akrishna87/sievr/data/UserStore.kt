@@ -36,6 +36,10 @@ data class UserData(
     val watchColumns: List<String> = listOf("price", "chg1d", "pe", "roe", "sievrScore"),
     /** "system", "light" or "dark". */
     val theme: String = "system",
+    /** Text size multiplier: 0.9 small, 1.0 default, 1.15 large, 1.3 extra large. */
+    val fontScale: Float = 1f,
+    /** "system", "serif", "condensed", "mono" or "handwritten". */
+    val fontFamily: String = "system",
     /** Notify when a watchlist stock moves this much in a day, %; 0 = off. */
     val watchMoveAlert: Double = 5.0,
     val dailyDigest: Boolean = true,

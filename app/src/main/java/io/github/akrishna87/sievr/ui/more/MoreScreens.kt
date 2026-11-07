@@ -61,6 +61,7 @@ import io.github.akrishna87.sievr.ui.components.EmptyState
 import io.github.akrishna87.sievr.ui.components.Fmt
 import io.github.akrishna87.sievr.ui.components.LineChart
 import io.github.akrishna87.sievr.ui.components.SectionHeader
+import io.github.akrishna87.sievr.ui.components.SievrCard
 import io.github.akrishna87.sievr.ui.components.Series
 import io.github.akrishna87.sievr.ui.components.StockSearch
 import io.github.akrishna87.sievr.ui.components.WithMarket
@@ -267,6 +268,29 @@ fun SettingsScreen() {
             FlowRow {
                 listOf("system" to "Follow phone", "light" to "Light", "dark" to "Dark").forEach { (id, label) ->
                     FilterChip(user.theme == id, { store.update { it.copy(theme = id) } }, { Text(label) }, Modifier.padding(end = 6.dp))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Text size", style = MaterialTheme.typography.titleSmall)
+            FlowRow {
+                io.github.akrishna87.sievr.ui.theme.textSizeChoices.forEach { (label, scale) ->
+                    FilterChip(kotlin.math.abs(user.fontScale - scale) < 0.01f, { store.update { it.copy(fontScale = scale) } },
+                        { Text(label) }, Modifier.padding(end = 6.dp))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Font", style = MaterialTheme.typography.titleSmall)
+            FlowRow {
+                io.github.akrishna87.sievr.ui.theme.fontChoices.forEach { (id, label) ->
+                    FilterChip(user.fontFamily == id, { store.update { it.copy(fontFamily = id) } },
+                        { Text(label, fontFamily = io.github.akrishna87.sievr.ui.theme.fontFamilyFor(id)) }, Modifier.padding(end = 6.dp))
+                }
+            }
+            SievrCard(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Preview", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Reliance Industries", style = MaterialTheme.typography.titleMedium)
+                    Text("₹1,234.50  +1.25%  ·  P/E 24.3  ·  ROE 18.2%", style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Spacer(Modifier.height(16.dp))

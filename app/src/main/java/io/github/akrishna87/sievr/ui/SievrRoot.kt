@@ -90,7 +90,7 @@ fun SievrRoot(pendingSymbol: MutableState<String?>) {
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
-    SievrTheme(user.theme) {
+    SievrTheme(user.theme, user.fontScale, user.fontFamily) {
         val nav = rememberNavController()
         val navigator = remember(nav) { Navigator(nav) }
 

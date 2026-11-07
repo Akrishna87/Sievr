@@ -61,7 +61,7 @@ data class MarketColors(val up: Color, val down: Color, val neutral: Color)
 val LocalMarketColors = staticCompositionLocalOf { MarketColors(Color(0xFF15803D), Color(0xFFDC2626), Color.Gray) }
 
 @Composable
-fun SievrTheme(mode: String = "system", content: @Composable () -> Unit) {
+fun SievrTheme(mode: String = "system", fontScale: Float = 1f, fontFamily: String = "system", content: @Composable () -> Unit) {
     val dark = when (mode) {
         "dark" -> true
         "light" -> false
@@ -70,12 +70,44 @@ fun SievrTheme(mode: String = "system", content: @Composable () -> Unit) {
     val colors = if (dark) MarketColors(Color(0xFF4ADE80), Color(0xFFF87171), Color(0xFF94A3B8))
     else MarketColors(Color(0xFF15803D), Color(0xFFDC2626), Color(0xFF64748B))
     val base = Typography()
+    val family = fontFamilyFor(fontFamily)
+    fun TextStyle.f() = copy(fontFamily = family)
     val typography = base.copy(
-        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp),
+        displayLarge = base.displayLarge.f(), displayMedium = base.displayMedium.f(), displaySmall = base.displaySmall.f(),
+        headlineLarge = base.headlineLarge.f(), headlineMedium = base.headlineMedium.f(), headlineSmall = base.headlineSmall.f(),
+        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold).f(),
+        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold).f(),
+        titleSmall = base.titleSmall.f(),
+        bodyLarge = base.bodyLarge.f(), bodyMedium = base.bodyMedium.f(), bodySmall = base.bodySmall.f(),
+        labelLarge = base.labelLarge.f(), labelMedium = base.labelMedium.f(),
+        labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp).f(),
     )
-    androidx.compose.runtime.CompositionLocalProvider(LocalMarketColors provides colors) {
+    // Text size: multiply the phone's own font scale, so it also respects Android's accessibility setting.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scaled = androidx.compose.ui.unit.Density(density.density, density.fontScale * fontScale.coerceIn(0.8f, 1.5f))
+    androidx.compose.runtime.CompositionLocalProvider(LocalMarketColors provides colors, androidx.compose.ui.platform.LocalDensity provides scaled) {
         MaterialTheme(colorScheme = if (dark) Dark else Light, typography = typography, content = content)
     }
 }
+
+/** The fonts users can pick: all ship with Android, so nothing is downloaded. */
+val fontChoices = listOf(
+    "system" to "System",
+    "serif" to "Serif",
+    "condensed" to "Condensed",
+    "mono" to "Monospace",
+    "handwritten" to "Handwritten",
+)
+
+fun fontFamilyFor(id: String): androidx.compose.ui.text.font.FontFamily = when (id) {
+    "serif" -> androidx.compose.ui.text.font.FontFamily.Serif
+    "mono" -> androidx.compose.ui.text.font.FontFamily.Monospace
+    "handwritten" -> androidx.compose.ui.text.font.FontFamily.Cursive
+    "condensed" -> androidx.compose.ui.text.font.FontFamily(
+        androidx.compose.ui.text.font.Typeface(android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL)),
+    )
+    else -> androidx.compose.ui.text.font.FontFamily.Default
+}
+
+/** Text size choices: label to multiplier. */
+val textSizeChoices = listOf("Small" to 0.9f, "Default" to 1f, "Large" to 1.15f, "Extra large" to 1.3f)
