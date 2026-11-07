@@ -24,7 +24,14 @@ object Fmt {
         return (if (negative) "-" else "") + grouped + frac
     }
 
-    fun price(x: Double?): String = x?.let { "₹" + indian(it, if (abs(it) >= 10_000) 0 else 2) } ?: "—"
+    /** Money and stock prices: always 2 decimals, Indian grouping (₹46,704.35, ₹1,25,037.50). */
+    fun price(x: Double?): String = x?.let { "₹" + indian(it, 2) } ?: "—"
+
+    /** Fund NAVs and average NAVs: 3 decimals (₹14.403). */
+    fun nav(x: Double?): String = x?.let { "₹" + indian(it, 3) } ?: "—"
+
+    /** Fund units: 3 decimals at any size (1,23,456.789). */
+    fun units(x: Double?): String = x?.let { indian(it, 3) } ?: "—"
 
     fun crore(x: Double?): String = when {
         x == null -> "—"

@@ -71,8 +71,7 @@ private fun Stat(label: String, value: String, sub: String?, modifier: Modifier,
     val color = if (colorFor == null) MaterialTheme.colorScheme.onSurface else changeColor(colorFor)
     Column(modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1,
-            overflow = TextOverflow.Ellipsis)
+        Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = color, maxLines = 2)
         if (sub != null) Text(sub, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 1)
     }
 }
@@ -136,8 +135,8 @@ fun HoldingRow(
             }
             Column(Modifier.weight(1.1f), horizontalAlignment = Alignment.End) {
                 Text("Returns", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(signedMoney(gain) + (gainPercent?.let { "  " + Fmt.percent(it, true, 1) } ?: ""), style = MaterialTheme.typography.bodyMedium,
-                    color = changeColor(gain), fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(signedMoney(gain), style = MaterialTheme.typography.bodyMedium, color = changeColor(gain), fontWeight = FontWeight.Medium)
+                gainPercent?.let { Text(Fmt.percent(it, true, 2), style = MaterialTheme.typography.bodySmall, color = changeColor(gain)) }
                 if (dayPercent != null) Text("1D ${Fmt.percent(dayPercent, true, 2)}", style = MaterialTheme.typography.labelSmall, color = changeColor(dayPercent))
             }
         }

@@ -209,7 +209,7 @@ fun MutualFundsTab() {
             title = { Text("Import ${r.holdings.size} funds?") },
             text = {
                 Text(
-                    r.holdings.take(6).joinToString("\n") { "${it.name.take(40)}: ${Fmt.number(it.units, 3)} units" } +
+                    r.holdings.take(6).joinToString("\n") { "${it.name.take(40)}: ${Fmt.units(it.units)} units" } +
                         (if (r.holdings.size > 6) "\n…" else "") +
                         (if (r.unmatched.isNotEmpty()) "\n\nNot found (add these by hand): " + r.unmatched.take(5).joinToString(", ") else ""),
                 )
@@ -263,7 +263,7 @@ private fun CasResultDialog(r: io.github.akrishna87.sievr.core.mf.CasParser.Resu
                 Spacer(Modifier.height(8.dp))
                 r.holdings.take(12).forEach { h ->
                     Text("• ${h.name}", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("   ${Fmt.number(h.units, 3)} units · invested ${Fmt.price(h.invested)}", style = MaterialTheme.typography.bodySmall,
+                    Text("   ${Fmt.units(h.units)} units · invested ${Fmt.price(h.invested)}", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (r.holdings.size > 12) Text("…and ${r.holdings.size - 12} more", style = MaterialTheme.typography.bodySmall)
@@ -356,8 +356,8 @@ private fun Actions(onAdd: () -> Unit, onPdf: () -> Unit, onCsv: () -> Unit, onH
 private fun FundRow(p: MutualFunds.Position, onClick: () -> Unit) {
     io.github.akrishna87.sievr.ui.components.HoldingRow(
         title = p.name,
-        detail = "${Fmt.number(p.holding.units, 3)} units · NAV ${p.scheme?.let { Fmt.price(it.nav) } ?: "—"}" +
-            (p.averageNav?.let { " · avg ${Fmt.price(it)}" } ?: ""),
+        detail = "${Fmt.units(p.holding.units)} units · NAV ${p.scheme?.let { Fmt.nav(it.nav) } ?: "—"}" +
+            (p.averageNav?.let { " · avg ${Fmt.nav(it)}" } ?: ""),
         invested = p.holding.invested, value = p.value, gain = p.gain, gainPercent = p.gainPercent,
         dayPercent = p.scheme?.dayChangePercent, onClick = onClick,
     )
@@ -385,7 +385,7 @@ private fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick:
                 items(results, key = { it.code }) { s ->
                     Column(Modifier.fillMaxWidth().clickable { onPick(s) }.padding(horizontal = 16.dp, vertical = 10.dp)) {
                         Text(s.name, style = MaterialTheme.typography.bodyMedium)
-                        Text("${s.subCategory} · NAV ${Fmt.price(s.nav)} on ${Fmt.isoDate(s.date)}", style = MaterialTheme.typography.bodySmall,
+                        Text("${s.subCategory} · NAV ${Fmt.nav(s.nav)} on ${Fmt.isoDate(s.date)}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     HorizontalDivider()
@@ -399,7 +399,7 @@ private fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick:
 @Composable
 private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, onDismiss: () -> Unit) {
     val store = SievrApp.instance.user
-    var units by remember { mutableStateOf(existing?.units?.let { Fmt.number(it, 3) }?.replace(",", "") ?: "") }
+    var units by remember { mutableStateOf(existing?.units?.let { Fmt.units(it) }?.replace(",", "") ?: "") }
     var invested by remember { mutableStateOf(existing?.invested?.let { "%.2f".format(java.util.Locale.US, it) } ?: "") }
     val u = units.replace(",", "").toDoubleOrNull()
     val inv = invested.replace(",", "").toDoubleOrNull()
@@ -423,7 +423,7 @@ private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, onDismiss: () ->
                 if (scheme != null && u != null && u > 0) {
                     Spacer(Modifier.height(8.dp))
                     val value = scheme.nav * u
-                    Text("Worth ${Fmt.price(value)} at NAV ${Fmt.price(scheme.nav)}" +
+                    Text("Worth ${Fmt.price(value)} at NAV ${Fmt.nav(scheme.nav)}" +
                         (if (inv != null && inv > 0) " · ${Fmt.percent((value / inv - 1) * 100, true)}" else ""),
                         style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                 }
