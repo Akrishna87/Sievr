@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material3.AlertDialog
@@ -105,8 +107,19 @@ fun WatchlistScreen() {
                         }
                     }
                     if (stocks.isEmpty() && list.funds.isEmpty()) item {
-                        EmptyState("Nothing here yet", "Add stocks, ETFs or mutual funds with +, or the star on any stock page. Long-press a row to remove it.",
-                            "Add a stock") { addMenu = true }
+                        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            EmptyState("Start your ${list.name}", "Follow stocks, ETFs and mutual funds here, with today's price or NAV and " +
+                                "the day's move. Tip: tap the star on any stock page to add it. Long-press a row to remove it.")
+                            androidx.compose.material3.Button(onClick = { adding = true }, Modifier.padding(horizontal = 32.dp).fillMaxWidth()) {
+                                Icon(io.github.akrishna87.sievr.ui.watchlist.WatchIcons.stock, null)
+                                Text("  Add stocks & ETFs")
+                            }
+                            androidx.compose.material3.OutlinedButton(onClick = { addingFund = true },
+                                Modifier.padding(horizontal = 32.dp, vertical = 8.dp).fillMaxWidth()) {
+                                Icon(io.github.akrishna87.sievr.ui.watchlist.WatchIcons.fund, null)
+                                Text("  Add mutual funds")
+                            }
+                        }
                     } else if (stocks.isNotEmpty()) stockTable(
                         stocks, user.watchColumns, hScroll, sortBy, desc,
                         onSort = { id -> if (sortBy == id) desc = !desc else { sortBy = id; desc = Metrics[id]?.higherIsBetter != false } },
@@ -219,4 +232,9 @@ private fun FundInfoDialog(s: io.github.akrishna87.sievr.core.mf.MfScheme, onDis
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         dismissButton = { TextButton(onClick = onRemove) { Text("Remove from list") } },
     )
+}
+
+internal object WatchIcons {
+    val stock = Icons.Default.ShowChart
+    val fund = Icons.Default.AccountBalance
 }
