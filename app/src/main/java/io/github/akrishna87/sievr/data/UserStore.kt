@@ -21,7 +21,13 @@ import java.io.File
 import java.util.UUID
 
 @Serializable
-data class Watchlist(val id: String, val name: String, val symbols: List<String> = emptyList())
+data class Watchlist(
+    val id: String,
+    val name: String,
+    val symbols: List<String> = emptyList(),
+    /** Mutual funds watched, by AMFI scheme code. */
+    val funds: List<Int> = emptyList(),
+)
 
 /** A family member whose stocks and funds are tracked separately. */
 @Serializable
@@ -68,6 +74,9 @@ data class UserData(
     val watchColumns: List<String> = listOf("price", "chg1d", "pe", "roe", "sievrScore"),
     /** "system", "light" or "dark". */
     val theme: String = "system",
+    /** App skin: accent colour (ARGB) for the whole app, 0 for Sievr's teal; tint 0 off, 1 light, 2 strong. */
+    val skinColor: Long = 0L,
+    val skinTint: Int = 1,
     /** Text size multiplier: 0.9 small, 1.0 default, 1.15 large, 1.3 extra large. */
     val fontScale: Float = 1f,
     /** "system", "serif", "condensed", "mono" or "handwritten". */
@@ -126,6 +135,12 @@ class UserStore(context: Context) {
             if (w.id != listId) w
             else if (symbol in w.symbols) w.copy(symbols = w.symbols - symbol)
             else w.copy(symbols = w.symbols + symbol)
+        })
+    }
+
+    fun toggleWatchFund(code: Int, listId: String) = update { d ->
+        d.copy(watchlists = d.watchlists.map { w ->
+            if (w.id != listId) w else if (code in w.funds) w.copy(funds = w.funds - code) else w.copy(funds = w.funds + code)
         })
     }
 

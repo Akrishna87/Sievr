@@ -1,6 +1,11 @@
 package io.github.akrishna87.sievr.ui.more
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -266,8 +271,33 @@ fun SettingsScreen() {
         Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text("Theme", style = MaterialTheme.typography.titleSmall)
             FlowRow {
-                listOf("system" to "Follow phone", "light" to "Light", "dark" to "Dark").forEach { (id, label) ->
+                listOf("system" to "Follow phone", "light" to "Light", "dark" to "Dark", "black" to "Pure black").forEach { (id, label) ->
                     FilterChip(user.theme == id, { store.update { it.copy(theme = id) } }, { Text(label) }, Modifier.padding(end = 6.dp))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("App colour", style = MaterialTheme.typography.titleSmall)
+            Text("Changes the colour of the whole app. Portfolio folders can still have their own.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(Modifier.padding(top = 6.dp)) {
+                io.github.akrishna87.sievr.ui.theme.skinChoices.forEach { (c, label) ->
+                    val selected = user.skinColor == c
+                    Column(Modifier.padding(end = 10.dp, bottom = 8.dp).clickable { store.update { it.copy(skinColor = c) } },
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        androidx.compose.foundation.layout.Box(
+                            Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(io.github.akrishna87.sievr.ui.theme.skinSwatch(c))
+                                .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, androidx.compose.foundation.shape.CircleShape) else Modifier),
+                            contentAlignment = Alignment.Center,
+                        ) { if (selected) Icon(Icons.Default.Check, "Selected", tint = androidx.compose.ui.graphics.Color.White) }
+                        Text(label, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Text("Background tint", style = MaterialTheme.typography.labelMedium)
+            FlowRow {
+                listOf(0 to "Off", 1 to "Light", 2 to "Strong").forEach { (v, label) ->
+                    FilterChip(user.skinTint == v, { store.update { it.copy(skinTint = v) } }, { Text(label) }, Modifier.padding(end = 6.dp))
                 }
             }
             Spacer(Modifier.height(16.dp))

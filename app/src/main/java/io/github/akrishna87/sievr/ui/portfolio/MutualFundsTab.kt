@@ -403,7 +403,7 @@ private fun FundRow(p: MutualFunds.Position, cagr: Double?, onClick: () -> Unit)
 }
 
 @Composable
-private fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick: (MfScheme) -> Unit) {
+internal fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick: (MfScheme) -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by rememberSaveable { mutableStateOf("") }
     val results = remember(query, schemes) { if (query.trim().length < 2) emptyList() else MutualFunds.search(schemes, query) }

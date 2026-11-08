@@ -1,5 +1,8 @@
 package io.github.akrishna87.sievr.ui.watchlist
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -56,10 +59,23 @@ fun WatchlistScreen() {
     var sortBy by rememberSaveable { mutableStateOf<String?>(null) }
     var desc by rememberSaveable { mutableStateOf(true) }
     var removing by remember { mutableStateOf<String?>(null) }
+    var addMenu by remember { mutableStateOf(false) }
+    var addingFund by remember { mutableStateOf(false) }
+    var fundInfo by remember { mutableStateOf<io.github.akrishna87.sievr.core.mf.MfScheme?>(null) }
+    val app = SievrApp.instance
+    val mf by app.mf.state.collectAsStateWithLifecycle()
+    // Fund NAVs load only when someone watches or holds a fund.
+    androidx.compose.runtime.LaunchedEffect(list.funds.isNotEmpty() || addingFund) {
+        if (list.funds.isNotEmpty() || addingFund) app.mf.start()
+    }
 
     Scaffold(topBar = {
         TopAppBar(title = { Text("Watchlists") }, actions = {
-            IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "Add stock") }
+            IconButton(onClick = { addMenu = true }) { Icon(Icons.Default.Add, "Add stock, ETF or fund") }
+            DropdownMenu(addMenu, { addMenu = false }) {
+                DropdownMenuItem({ Text("Stock or ETF") }, onClick = { addMenu = false; adding = true })
+                DropdownMenuItem({ Text("Mutual fund") }, onClick = { addMenu = false; addingFund = true })
+            }
             IconButton(onClick = { columns = true }) { Icon(Icons.Default.ViewColumn, "Columns") }
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
             DropdownMenu(menu, { menu = false }) {
@@ -84,18 +100,30 @@ fun WatchlistScreen() {
                     if (user.watchlists.size > 1) item {
                         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
                             items(user.watchlists, key = { it.id }) { w ->
-                                FilterChip(w.id == list.id, { selectedId = w.id }, { Text("${w.name} (${w.symbols.size})") }, Modifier.padding(4.dp))
+                                FilterChip(w.id == list.id, { selectedId = w.id }, { Text("${w.name} (${w.symbols.size + w.funds.size})") }, Modifier.padding(4.dp))
                             }
                         }
                     }
-                    if (stocks.isEmpty()) item {
-                        EmptyState("Nothing here yet", "Add stocks with + or the star on any stock page. Long-press a row to remove it.", "Add a stock") { adding = true }
-                    } else stockTable(
+                    if (stocks.isEmpty() && list.funds.isEmpty()) item {
+                        EmptyState("Nothing here yet", "Add stocks, ETFs or mutual funds with +, or the star on any stock page. Long-press a row to remove it.",
+                            "Add a stock") { addMenu = true }
+                    } else if (stocks.isNotEmpty()) stockTable(
                         stocks, user.watchColumns, hScroll, sortBy, desc,
                         onSort = { id -> if (sortBy == id) desc = !desc else { sortBy = id; desc = Metrics[id]?.higherIsBetter != false } },
                         onOpen = { nav.stock(it.symbol) },
                         onLongPress = { removing = it.symbol },
                     )
+                    if (list.funds.isNotEmpty()) {
+                        item { io.github.akrishna87.sievr.ui.components.SectionHeader("Mutual funds (${list.funds.size})") }
+                        val byCode = mf.byCode
+                        if (byCode.isEmpty()) item {
+                            Text(if (mf.error != null) "Couldn't load fund NAVs: ${mf.error}" else "Loading the latest NAVs…",
+                                Modifier.padding(16.dp), style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        } else items(list.funds, key = { "mf$it" }) { code ->
+                            val s = byCode[code]
+                            FundWatchRow(s, code, onOpen = { fundInfo = s }, onRemove = { store.toggleWatchFund(code, list.id) })
+                        }
+                    }
                 }
                 if (adding) StockSearch(market, onDismiss = { adding = false }, title = "Add to ${list.name}", recent = user.recentSymbols) {
                     if (it.symbol !in list.symbols) store.toggleWatch(it.symbol, list.id)
@@ -104,6 +132,18 @@ fun WatchlistScreen() {
             }
         }
     }
+    if (addingFund) {
+        val schemes = mf.data?.schemes
+        if (schemes == null) {
+            AlertDialog(onDismissRequest = { addingFund = false }, title = { Text("Mutual funds") },
+                text = { Text(mf.error ?: "Downloading the latest NAVs…") },
+                confirmButton = { TextButton(onClick = { addingFund = false }) { Text("Close") } })
+        } else io.github.akrishna87.sievr.ui.portfolio.SchemeSearch(schemes, onDismiss = { addingFund = false }) { s ->
+            if (s.code !in list.funds) store.toggleWatchFund(s.code, list.id)
+            addingFund = false
+        }
+    }
+    fundInfo?.let { s -> FundInfoDialog(s, onDismiss = { fundInfo = null }) { store.toggleWatchFund(s.code, list.id); fundInfo = null } }
     if (columns) MetricPicker("Add a column", onDismiss = { columns = false }, exclude = user.watchColumns.toSet(), includePatterns = false) { m ->
         store.update { it.copy(watchColumns = it.watchColumns + m.id) }
         columns = false
@@ -131,4 +171,52 @@ fun WatchlistScreen() {
             dismissButton = { TextButton(onClick = { newList = false; naming = null }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+private fun FundWatchRow(s: io.github.akrishna87.sievr.core.mf.MfScheme?, code: Int, onOpen: () -> Unit, onRemove: () -> Unit) {
+    val ty = androidx.compose.material3.MaterialTheme.typography
+    val muted = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onRemove).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(s?.name ?: "Scheme $code", style = ty.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(s?.let { "${it.subCategory} · ${io.github.akrishna87.sievr.ui.components.Fmt.isoDate(it.date)}" } ?: "No longer in AMFI's list",
+                style = ty.bodySmall, color = muted, maxLines = 1)
+        }
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.End, modifier = Modifier.padding(start = 12.dp)) {
+            Text(s?.let { io.github.akrishna87.sievr.ui.components.Fmt.nav(it.nav) } ?: "—", style = ty.bodyMedium)
+            val d = s?.dayChangePercent
+            Text(io.github.akrishna87.sievr.ui.components.Fmt.percent(d, true, 2), style = ty.bodySmall,
+                color = io.github.akrishna87.sievr.ui.components.changeColor(d))
+        }
+    }
+    androidx.compose.material3.HorizontalDivider()
+}
+
+@Composable
+private fun FundInfoDialog(s: io.github.akrishna87.sievr.core.mf.MfScheme, onDismiss: () -> Unit, onRemove: () -> Unit) {
+    val ty = androidx.compose.material3.MaterialTheme.typography
+    val F = io.github.akrishna87.sievr.ui.components.Fmt
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s.name, style = ty.titleMedium) },
+        text = {
+            Column {
+                Text("NAV ${F.nav(s.nav)} on ${F.isoDate(s.date)}", style = ty.bodyLarge)
+                s.prevNav?.let { p ->
+                    Text("Previous ${F.nav(p)}" + (s.prevDate?.let { " on ${F.isoDate(it)}" } ?: "") + " · " + F.percent(s.dayChangePercent, true, 2),
+                        style = ty.bodyMedium, color = io.github.akrishna87.sievr.ui.components.changeColor(s.dayChangePercent))
+                }
+                Text("\n${s.assetClass} · ${s.subCategory}" + (if (s.amc.isNotBlank()) "\n${s.amc}" else ""), style = ty.bodySmall)
+                if (s.isin.isNotEmpty()) Text("ISIN ${s.isin.joinToString(", ")} · AMFI code ${s.code}", style = ty.bodySmall)
+                Text("\nTo track your units and gains, add it under Portfolio → Mutual funds.", style = ty.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = onRemove) { Text("Remove from list") } },
+    )
 }

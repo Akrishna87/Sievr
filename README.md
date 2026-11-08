@@ -29,8 +29,11 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 - Piotroski F-score, Altman Z-score, Magic Formula rank, PEG, earnings yield, cash conversion, ROCE consistency
 - Compare up to four stocks side by side
 
+**Looks**
+- App colours (12 skins with a light or strong background tint), light, dark or pure-black theme, text size and font
+
 **Tracking**
-- Multiple watchlists with custom columns
+- Multiple watchlists with custom columns; watch stocks, ETFs and mutual funds (latest NAV and 1-day change)
 - Portfolio X-ray: shares and ETFs; import your NSDL/CDSL demat statement PDF (all demat accounts at once) or a broker report (Zerodha, Groww, Upstox…), see gains, sector and cap mix, weighted P/E and ROE,
   expected dividends, concentration and red flags (pledges, distress, over-concentration)
 - Mutual funds: import your CAS statement PDF (CAMS, KFintech, MF Central, NSDL or CDSL; read on the phone, never

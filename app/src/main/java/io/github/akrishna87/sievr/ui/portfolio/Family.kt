@@ -308,29 +308,7 @@ fun MemberBreakdown(rows: List<MemberTotals>) {
  */
 @Composable
 fun FolderSkin(color: Long, tint: Int, content: @Composable () -> Unit) {
-    val base = MaterialTheme.colorScheme
-    val dark = base.surface.luminance() < 0.5f
-    val c = Color(color)
-    // A dark folder colour on a dark page is lifted so it stays visible.
-    val accent = if (dark) androidx.compose.ui.graphics.lerp(c, Color.White, 0.35f) else c
-    val amount = when (tint) { 0 -> 0f; 1 -> if (dark) 0.10f else 0.07f; else -> if (dark) 0.20f else 0.16f }
-    fun wash(x: Color, k: Float = 1f) = androidx.compose.ui.graphics.lerp(x, c, (amount * k).coerceAtMost(0.5f))
-    val scheme = base.copy(
-        primary = accent,
-        onPrimary = if (accent.luminance() > 0.5f) Color.Black else Color.White,
-        primaryContainer = androidx.compose.ui.graphics.lerp(base.surface, c, if (dark) 0.35f else 0.22f),
-        onPrimaryContainer = base.onSurface,
-        secondaryContainer = androidx.compose.ui.graphics.lerp(base.surface, c, if (dark) 0.32f else 0.20f),
-        onSecondaryContainer = base.onSurface,
-        background = wash(base.background),
-        surface = wash(base.surface),
-        surfaceVariant = wash(base.surfaceVariant, 1.3f),
-        surfaceContainerLowest = wash(base.surfaceContainerLowest),
-        surfaceContainerLow = wash(base.surfaceContainerLow, 1.3f),
-        surfaceContainer = wash(base.surfaceContainer, 1.4f),
-        surfaceContainerHigh = wash(base.surfaceContainerHigh, 1.5f),
-        surfaceContainerHighest = wash(base.surfaceContainerHighest, 1.6f),
-    )
+    val scheme = io.github.akrishna87.sievr.ui.theme.skinned(MaterialTheme.colorScheme, Color(color), tint)
     MaterialTheme(colorScheme = scheme, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
         androidx.compose.material3.Surface(color = scheme.background, contentColor = scheme.onBackground) { content() }
     }
