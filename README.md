@@ -29,6 +29,10 @@ screeners charge for are calculated on the phone from one end-of-day data file t
 - Piotroski F-score, Altman Z-score, Magic Formula rank, PEG, earnings yield, cash conversion, ROCE consistency
 - Compare up to four stocks side by side
 
+**Search**
+- Voice search (mic) in every search box: stocks, ETFs, mutual funds, metrics and plain-English screens
+- Tick several results to add them at once: watchlists, comparisons (up to four) and portfolio holdings (asked one by one)
+
 **Looks**
 - App colours (12 skins with a light or strong background tint), light, dark or pure-black theme, text size and font
 

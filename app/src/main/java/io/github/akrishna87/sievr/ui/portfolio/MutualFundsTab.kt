@@ -85,6 +85,7 @@ fun MutualFundsTab(view: String, members: List<Member>, target: String, groupNam
     var reading by remember { mutableStateOf(false) }
     var casResult by remember { mutableStateOf<io.github.akrishna87.sievr.core.mf.CasParser.Result?>(null) }
     var howTo by remember { mutableStateOf(false) }
+    var fundQueue by remember { mutableStateOf(listOf<MfScheme>()) }
 
     LaunchedEffect(Unit) { app.mf.start() }
 
@@ -220,11 +221,20 @@ fun MutualFundsTab(view: String, members: List<Member>, target: String, groupNam
         }
     }
 
-    if (searching) SchemeSearch(data.schemes, onDismiss = { searching = false }) { s ->
-        searching = false
-        editing = s to user.mfHoldings.firstOrNull { it.code == s.code && it.owner == target }
+    fun open(s: MfScheme) { editing = s to user.mfHoldings.firstOrNull { it.code == s.code && it.owner == target } }
+    if (searching) SchemeSearch(data.schemes, onDismiss = { searching = false }, title = "Add funds" + (targetName?.let { " for $it" } ?: ""),
+        onPickMany = { list ->
+            // Several funds: ask for each one's units and amount in turn.
+            searching = false
+            list.firstOrNull()?.let { open(it) }
+            fundQueue = list.drop(1)
+        })
+    editing?.let { (scheme, holding) ->
+        FundDialog(scheme, holding, holding?.owner ?: target, step = fundQueue.size.takeIf { it > 0 }?.let { "$it more after this" }) {
+            editing = null
+            fundQueue.firstOrNull()?.let { open(it); fundQueue = fundQueue.drop(1) }
+        }
     }
-    editing?.let { (scheme, holding) -> FundDialog(scheme, holding, holding?.owner ?: target) { editing = null } }
     importMessage?.let {
         AlertDialog(onDismissRequest = { importMessage = null }, title = { Text("Import") }, text = { Text(it) },
             confirmButton = { TextButton(onClick = { importMessage = null }) { Text("OK") } })
@@ -403,32 +413,55 @@ private fun FundRow(p: MutualFunds.Position, cagr: Double?, onClick: () -> Unit)
 }
 
 @Composable
-internal fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick: (MfScheme) -> Unit) {
+internal fun SchemeSearch(
+    schemes: List<MfScheme>,
+    onDismiss: () -> Unit,
+    title: String = "Add a fund",
+    added: Set<Int> = emptySet(),
+    onPickMany: ((List<MfScheme>) -> Unit)? = null,
+    onPick: (MfScheme) -> Unit = {},
+) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by rememberSaveable { mutableStateOf("") }
+    var picked by remember { mutableStateOf(listOf<Int>()) }
+    val byCode = remember(schemes) { schemes.associateBy { it.code } }
     val results = remember(query, schemes) { if (query.trim().length < 2) emptyList() else MutualFunds.search(schemes, query) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxHeight(0.9f)) {
-            Text("Add a fund", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
-            OutlinedTextField(
-                query, { query = it }, Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                placeholder = { Text("Fund name, e.g. parag flexi direct") },
-                leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true,
-            )
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
+            io.github.akrishna87.sievr.ui.components.SearchField(query, { query = it }, "Fund name, e.g. parag flexi direct",
+                Modifier.fillMaxWidth().padding(16.dp, 8.dp), voicePrompt = "Say a fund name, e.g. Parag Parikh flexi cap direct")
             Text(
                 if (query.trim().length < 2) "Type a few words of the fund's name. You can also paste its ISIN or AMFI code."
-                else "${results.size} match${if (results.size == 1) "" else "es"}. Pick the exact plan you hold (Direct or Regular, Growth or IDCW).",
+                else "${results.size} match${if (results.size == 1) "" else "es"}. Pick the exact plan (Direct or Regular, Growth or IDCW)" +
+                    (if (onPickMany != null) "; tick several to add them together." else "."),
                 Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            LazyColumn {
+            LazyColumn(Modifier.weight(1f)) {
                 items(results, key = { it.code }) { s ->
-                    Column(Modifier.fillMaxWidth().clickable { onPick(s) }.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        Text(s.name, style = MaterialTheme.typography.bodyMedium)
-                        Text("${s.subCategory} · NAV ${Fmt.nav(s.nav)} on ${Fmt.isoDate(s.date)}", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val already = s.code in added
+                    val ticked = already || s.code in picked
+                    val click: () -> Unit = {
+                        if (onPickMany == null) {
+                            onPick(s)
+                        } else if (!already) {
+                            picked = if (s.code in picked) picked - s.code else picked + s.code
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().clickable(onClick = click), verticalAlignment = Alignment.CenterVertically) {
+                        if (onPickMany != null) androidx.compose.material3.Checkbox(ticked, { click() }, enabled = !already,
+                            modifier = Modifier.padding(start = 4.dp))
+                        Column(Modifier.weight(1f).padding(start = if (onPickMany != null) 0.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp)) {
+                            Text(s.name, style = MaterialTheme.typography.bodyMedium)
+                            Text((if (already) "Already added · " else "") + "${s.subCategory} · NAV ${Fmt.nav(s.nav)} on ${Fmt.isoDate(s.date)}",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     HorizontalDivider()
                 }
+            }
+            if (onPickMany != null) io.github.akrishna87.sievr.ui.components.AddSelectedBar(picked.size, onClear = { picked = emptyList() }) {
+                onPickMany(picked.mapNotNull { byCode[it] })
             }
         }
     }
@@ -436,7 +469,7 @@ internal fun SchemeSearch(schemes: List<MfScheme>, onDismiss: () -> Unit, onPick
 
 /** Units and amount invested for one fund; also shows what it's worth at today's NAV. */
 @Composable
-private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, owner: String, onDismiss: () -> Unit) {
+private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, owner: String, step: String? = null, onDismiss: () -> Unit) {
     val store = SievrApp.instance.user
     var units by remember { mutableStateOf(existing?.units?.let { Fmt.units(it) }?.replace(",", "") ?: "") }
     var invested by remember { mutableStateOf(existing?.invested?.let { "%.2f".format(java.util.Locale.US, it) } ?: "") }
@@ -449,7 +482,12 @@ private fun FundDialog(scheme: MfScheme?, existing: MfHolding?, owner: String, o
     val name = scheme?.name ?: existing?.name ?: "Scheme $code"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(name, style = MaterialTheme.typography.titleMedium) },
+        title = {
+            Column {
+                Text(name, style = MaterialTheme.typography.titleMedium)
+                if (step != null) Text(step, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        },
         text = {
             Column {
                 OutlinedTextField(units, { units = it }, label = { Text("Units") }, singleLine = true,

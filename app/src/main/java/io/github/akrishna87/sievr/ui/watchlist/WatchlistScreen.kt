@@ -138,10 +138,11 @@ fun WatchlistScreen() {
                         }
                     }
                 }
-                if (adding) StockSearch(market, onDismiss = { adding = false }, title = "Add to ${list.name}", recent = user.recentSymbols) {
-                    if (it.symbol !in list.symbols) store.toggleWatch(it.symbol, list.id)
-                    adding = false
-                }
+                if (adding) StockSearch(market, onDismiss = { adding = false }, title = "Add to ${list.name}", recent = user.recentSymbols,
+                    added = list.symbols.toSet(), onPickMany = { picked ->
+                        picked.forEach { if (it.symbol !in list.symbols) store.toggleWatch(it.symbol, list.id) }
+                        adding = false
+                    })
             }
         }
     }
@@ -151,10 +152,11 @@ fun WatchlistScreen() {
             AlertDialog(onDismissRequest = { addingFund = false }, title = { Text("Mutual funds") },
                 text = { Text(mf.error ?: "Downloading the latest NAVs…") },
                 confirmButton = { TextButton(onClick = { addingFund = false }) { Text("Close") } })
-        } else io.github.akrishna87.sievr.ui.portfolio.SchemeSearch(schemes, onDismiss = { addingFund = false }) { s ->
-            if (s.code !in list.funds) store.toggleWatchFund(s.code, list.id)
-            addingFund = false
-        }
+        } else io.github.akrishna87.sievr.ui.portfolio.SchemeSearch(schemes, onDismiss = { addingFund = false }, title = "Add funds to ${list.name}",
+            added = list.funds.toSet(), onPickMany = { picked ->
+                picked.forEach { if (it.code !in list.funds) store.toggleWatchFund(it.code, list.id) }
+                addingFund = false
+            })
     }
     fundInfo?.let { s -> FundInfoDialog(s, onDismiss = { fundInfo = null }) { store.toggleWatchFund(s.code, list.id); fundInfo = null } }
     if (columns) MetricPicker("Add a column", onDismiss = { columns = false }, exclude = user.watchColumns.toSet(), includePatterns = false) { m ->

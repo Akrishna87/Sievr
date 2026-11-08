@@ -115,7 +115,12 @@ private fun ScreensBody(market: Market) {
                     OutlinedTextField(
                         query, { query = it }, Modifier.fillMaxWidth(),
                         placeholder = { Text("e.g. profitable small caps with low debt") },
-                        trailingIcon = { IconButton(onClick = { ask(query) }) { Icon(Icons.AutoMirrored.Filled.Send, "Build screen") } },
+                        trailingIcon = {
+                            Row {
+                                io.github.akrishna87.sievr.ui.components.MicButton("Describe the stocks you want") { query = it; ask(it) }
+                                IconButton(onClick = { ask(query) }) { Icon(Icons.AutoMirrored.Filled.Send, "Build screen") }
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { ask(query) }),
                         maxLines = 3,

@@ -25,6 +25,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Checkbox
 import androidx.compose.ui.unit.dp
 import io.github.akrishna87.sievr.core.metrics.Category
 import io.github.akrishna87.sievr.core.metrics.Metric
@@ -54,11 +58,8 @@ fun MetricPicker(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxHeight(0.9f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
-            OutlinedTextField(
-                query, { query = it }, Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                placeholder = { Text("Search ${Metrics.all.size} metrics") },
-                leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true,
-            )
+            SearchField(query, { query = it }, "Search ${Metrics.all.size} metrics", Modifier.fillMaxWidth().padding(16.dp, 8.dp),
+                voicePrompt = "Say a metric, e.g. return on equity")
             LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)) {
                 item { FilterChip(category == null, { category = null }, { Text("All") }, Modifier.padding(4.dp)) }
                 items(categories) { c -> FilterChip(category == c, { category = if (category == c) null else c }, { Text(c.label) }, Modifier.padding(4.dp)) }
@@ -82,24 +83,57 @@ fun formulaName(m: Metric): String = (m.aliases.firstOrNull { it.contains('_') |
     it.split('_').joinToString("_") { w -> if (w.length <= 3) w.uppercase() else w.replaceFirstChar { c -> c.uppercase() } }
 }
 
-/** Finds stocks by symbol or name. */
+/**
+ * Finds stocks and ETFs by symbol, name or BSE code, typed or spoken. With [onPickMany], rows get tick boxes
+ * so several can be added at once ([added] are already in the list; [max] caps how many can be ticked).
+ */
 @Composable
-fun StockSearch(market: Market, onDismiss: () -> Unit, title: String = "Find a stock", recent: List<String> = emptyList(), onPick: (Stock) -> Unit) {
+fun StockSearch(
+    market: Market,
+    onDismiss: () -> Unit,
+    title: String = "Find a stock",
+    recent: List<String> = emptyList(),
+    added: Set<String> = emptySet(),
+    max: Int = Int.MAX_VALUE,
+    onPickMany: ((List<Stock>) -> Unit)? = null,
+    onPick: (Stock) -> Unit = {},
+) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by rememberSaveable { mutableStateOf("") }
+    var picked by remember { mutableStateOf(listOf<String>()) }
     val results = remember(query, market) { search(market, query, recent) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxHeight(0.9f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
-            OutlinedTextField(
-                query, { query = it }, Modifier.fillMaxWidth().padding(16.dp, 8.dp),
-                placeholder = { Text("Symbol, company name or BSE code") },
-                leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true,
+            SearchField(query, { query = it }, "Symbol, company name or BSE code", Modifier.fillMaxWidth().padding(16.dp, 8.dp),
+                voicePrompt = "Say a company or ETF name")
+            if (onPickMany != null) Text(
+                if (max < Int.MAX_VALUE) "Tick up to $max, then tap Add." else "Tick as many as you like, then tap Add. Search again to add more.",
+                Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            LazyColumn {
+            LazyColumn(Modifier.weight(1f)) {
                 items(results, key = { it.symbol }) { s ->
-                    StockRow(s, onClick = { onPick(s) }, showSparkline = false, subtitle = s.name + " · " + s.sector)
+                    if (onPickMany == null) StockRow(s, onClick = { onPick(s) }, showSparkline = false, subtitle = s.name + " · " + s.sector)
+                    else {
+                        val already = s.symbol in added
+                        val ticked = already || s.symbol in picked
+                        val toggle: () -> Unit = {
+                            if (!already) {
+                                picked = if (s.symbol in picked) picked - s.symbol else if (picked.size < max) picked + s.symbol else picked
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(ticked, { toggle() }, enabled = !already, modifier = Modifier.padding(start = 4.dp))
+                            Box(Modifier.weight(1f)) {
+                                StockRow(s, onClick = toggle, showSparkline = false,
+                                    subtitle = (if (already) "Already added · " else "") + s.name + " · " + s.sector)
+                            }
+                        }
+                    }
                 }
+            }
+            if (onPickMany != null) AddSelectedBar(picked.size, onClear = { picked = emptyList() }) {
+                onPickMany(picked.mapNotNull { market[it] })
             }
         }
     }

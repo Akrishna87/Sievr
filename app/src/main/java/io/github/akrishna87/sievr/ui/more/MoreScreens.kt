@@ -243,10 +243,11 @@ fun CompareScreen(initial: List<String>) {
                         }
                     }
                 }
-                if (adding) StockSearch(market, onDismiss = { adding = false }, title = "Add to comparison", recent = user.recentSymbols) {
-                    if (it.symbol !in symbols) symbols = symbols + it.symbol
-                    adding = false
-                }
+                if (adding) StockSearch(market, onDismiss = { adding = false }, title = "Add to comparison", recent = user.recentSymbols,
+                    added = symbols.toSet(), max = (4 - symbols.size).coerceAtLeast(0), onPickMany = { picked ->
+                        symbols = (symbols + picked.map { it.symbol }).distinct().take(4)
+                        adding = false
+                    })
             }
         }
     }

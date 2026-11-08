@@ -71,6 +71,7 @@ fun PortfolioScreen() {
     val context = LocalContext.current
     var picking by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Pair<String, Holding?>?>(null) }
+    var stockQueue by remember { mutableStateOf(listOf<String>()) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var pendingImport by remember { mutableStateOf<List<Holding>>(emptyList()) }
     var pendingUnmatched by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -170,12 +171,21 @@ fun PortfolioScreen() {
                         TextButton(onClick = launchImport, Modifier.padding(horizontal = 8.dp)) { Text("Use your broker's report, Excel or CSV (has your buy prices)") }
                     }
                 } else PortfolioBody(mine, market, family, members, view, group.name) { h -> target = h.owner; editing = h.symbol to h }
-                if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add a holding" + (memberName?.takeIf { members.size > 1 }?.let { " for $it" } ?: ""),
-                    recent = user.recentSymbols) {
-                    picking = false
-                    editing = it.symbol to user.holdings.firstOrNull { h -> h.symbol == it.symbol && h.owner == target }
+                fun open(sym: String) { editing = sym to user.holdings.firstOrNull { h -> h.symbol == sym && h.owner == target } }
+                if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add holdings" + (memberName?.takeIf { members.size > 1 }?.let { " for $it" } ?: ""),
+                    recent = user.recentSymbols, onPickMany = { list ->
+                        // Several stocks: ask for each one's quantity and price in turn.
+                        picking = false
+                        list.firstOrNull()?.let { open(it.symbol) }
+                        stockQueue = list.drop(1).map { it.symbol }
+                    })
+                editing?.let { (sym, existing) ->
+                    HoldingDialog(sym, existing, market[sym], existing?.owner ?: target,
+                        step = stockQueue.size.takeIf { it > 0 }?.let { "$it more after this" }) {
+                        editing = null
+                        stockQueue.firstOrNull()?.let { open(it); stockQueue = stockQueue.drop(1) }
+                    }
                 }
-                editing?.let { (sym, existing) -> HoldingDialog(sym, existing, market[sym], existing?.owner ?: target) { editing = null } }
             }
         }
     } }
@@ -294,7 +304,7 @@ private fun PortfolioBody(raw: List<Holding>, market: Market, family: Boolean, m
 }
 
 @Composable
-private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, owner: String, onDismiss: () -> Unit) {
+private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, owner: String, step: String? = null, onDismiss: () -> Unit) {
     val store = SievrApp.instance.user
     var qty by remember { mutableStateOf(existing?.quantity?.let { Fmt.number(it, 0) } ?: "") }
     var avg by remember { mutableStateOf(existing?.averageCost?.let { "%.2f".format(it) } ?: stock?.get("price")?.let { "%.2f".format(it) } ?: "") }
@@ -305,7 +315,12 @@ private fun HoldingDialog(symbol: String, existing: Holding?, stock: Stock?, own
     val dateOk = since != UserDate.INVALID
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(symbol) },
+        title = {
+            Column {
+                Text(symbol)
+                if (step != null) Text(step, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        },
         text = {
             Column {
                 OutlinedTextField(qty, { qty = it }, label = { Text("Quantity") }, singleLine = true)
