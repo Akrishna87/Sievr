@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import io.github.akrishna87.sievr.ui.components.Fmt
 import io.github.akrishna87.sievr.ui.components.SectionHeader
 import io.github.akrishna87.sievr.ui.components.changeColor
@@ -85,23 +86,24 @@ fun GroupBar(groups: List<Group>, current: Group) {
             AssistChip({ adding = true }, { Text("New folder") }, Modifier.padding(4.dp), leadingIcon = { Icon(Icons.Default.Add, null) })
         }
     }
-    if (adding) GroupDialog(null, groups.size, canDelete = false, onDismiss = { adding = false }) { name, color, first ->
-        store.addGroup(name, color, first ?: "Member"); adding = false
+    if (adding) GroupDialog(null, groups.size, canDelete = false, onDismiss = { adding = false }) { name, color, tint, first ->
+        store.addGroup(name, color, first ?: "Member", tint); adding = false
     }
     editing?.let { g ->
-        GroupDialog(g, groups.size, canDelete = groups.size > 1, onDismiss = { editing = null }) { name, color, _ ->
-            store.editGroup(g.id, name, color); editing = null
+        GroupDialog(g, groups.size, canDelete = groups.size > 1, onDismiss = { editing = null }) { name, color, tint, _ ->
+            store.editGroup(g.id, name, color, tint); editing = null
         }
     }
 }
 
 /** New folder (name, colour, first member) or edit one (name, colour, or delete it). */
 @Composable
-private fun GroupDialog(existing: Group?, count: Int, canDelete: Boolean, onDismiss: () -> Unit, onSave: (String, Long, String?) -> Unit) {
+private fun GroupDialog(existing: Group?, count: Int, canDelete: Boolean, onDismiss: () -> Unit, onSave: (String, Long, Int, String?) -> Unit) {
     val store = SievrApp.instance.user
     var name by remember { mutableStateOf(existing?.name ?: "") }
     var first by remember { mutableStateOf("") }
     var color by remember { mutableStateOf(existing?.color ?: GROUP_COLORS[count % GROUP_COLORS.size]) }
+    var tint by remember { mutableStateOf(existing?.tint ?: 1) }
     var deleting by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -130,6 +132,16 @@ private fun GroupDialog(existing: Group?, count: Int, canDelete: Boolean, onDism
                         }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                Text("Page colour", style = MaterialTheme.typography.labelMedium)
+                Row {
+                    listOf(0 to "Off", 1 to "Light", 2 to "Strong").forEach { (v, label) ->
+                        FilterChip(tint == v, { tint = v }, { Text(label) }, Modifier.padding(end = 6.dp),
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(color), selectedLabelColor = Color.White))
+                    }
+                }
+                Text("Tints the whole Portfolio page in this colour while the folder is open.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (existing != null && canDelete) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { deleting = true }) { Text("Delete this folder", color = MaterialTheme.colorScheme.error) }
@@ -138,7 +150,7 @@ private fun GroupDialog(existing: Group?, count: Int, canDelete: Boolean, onDism
         },
         confirmButton = {
             TextButton(enabled = name.isNotBlank() && (existing != null || first.isNotBlank()),
-                onClick = { onSave(name.trim(), color, first.trim().ifBlank { null }) }) { Text("Save") }
+                onClick = { onSave(name.trim(), color, tint, first.trim().ifBlank { null }) }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -287,5 +299,39 @@ fun MemberBreakdown(rows: List<MemberTotals>) {
             HorizontalDivider()
         }
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+/**
+ * The open folder's "skin": its colour becomes the page's accent, and with a tint the backgrounds, cards and
+ * bars take on a wash of it, so Family and Parents look different at a glance. Works in light and dark mode.
+ */
+@Composable
+fun FolderSkin(color: Long, tint: Int, content: @Composable () -> Unit) {
+    val base = MaterialTheme.colorScheme
+    val dark = base.surface.luminance() < 0.5f
+    val c = Color(color)
+    // A dark folder colour on a dark page is lifted so it stays visible.
+    val accent = if (dark) androidx.compose.ui.graphics.lerp(c, Color.White, 0.35f) else c
+    val amount = when (tint) { 0 -> 0f; 1 -> if (dark) 0.10f else 0.07f; else -> if (dark) 0.20f else 0.16f }
+    fun wash(x: Color, k: Float = 1f) = androidx.compose.ui.graphics.lerp(x, c, (amount * k).coerceAtMost(0.5f))
+    val scheme = base.copy(
+        primary = accent,
+        onPrimary = if (accent.luminance() > 0.5f) Color.Black else Color.White,
+        primaryContainer = androidx.compose.ui.graphics.lerp(base.surface, c, if (dark) 0.35f else 0.22f),
+        onPrimaryContainer = base.onSurface,
+        secondaryContainer = androidx.compose.ui.graphics.lerp(base.surface, c, if (dark) 0.32f else 0.20f),
+        onSecondaryContainer = base.onSurface,
+        background = wash(base.background),
+        surface = wash(base.surface),
+        surfaceVariant = wash(base.surfaceVariant, 1.3f),
+        surfaceContainerLowest = wash(base.surfaceContainerLowest),
+        surfaceContainerLow = wash(base.surfaceContainerLow, 1.3f),
+        surfaceContainer = wash(base.surfaceContainer, 1.4f),
+        surfaceContainerHigh = wash(base.surfaceContainerHigh, 1.5f),
+        surfaceContainerHighest = wash(base.surfaceContainerHighest, 1.6f),
+    )
+    MaterialTheme(colorScheme = scheme, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
+        androidx.compose.material3.Surface(color = scheme.background, contentColor = scheme.onBackground) { content() }
     }
 }

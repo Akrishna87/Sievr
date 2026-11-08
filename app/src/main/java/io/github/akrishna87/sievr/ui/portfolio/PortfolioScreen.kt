@@ -139,7 +139,7 @@ fun PortfolioScreen() {
     val launchImport = { withOwner { pdfPicker.launch("*/*") } }
     val startAdd = { withOwner { picking = true } }
 
-    Scaffold(topBar = {
+    FolderSkin(group.color, group.tint) { Scaffold(topBar = {
         TopAppBar(title = { Text("Portfolio") }, actions = {
             if (tab == 0) {
                 IconButton(onClick = launchImport) { Icon(Icons.Default.FileUpload, "Import a statement PDF or broker report") }
@@ -178,7 +178,7 @@ fun PortfolioScreen() {
                 editing?.let { (sym, existing) -> HoldingDialog(sym, existing, market[sym], existing?.owner ?: target) { editing = null } }
             }
         }
-    }
+    } }
     askOwner?.let { action ->
         OwnerPickerDialog(members, onDismiss = { askOwner = null }) { id -> target = id; askOwner = null; action() }
     }

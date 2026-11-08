@@ -29,7 +29,13 @@ data class Member(val id: String, val name: String, val group: String = DEFAULT_
 
 /** A folder of members whose portfolios are added up together, e.g. "Family" (me and my wife) or "Parents". */
 @Serializable
-data class Group(val id: String, val name: String, val color: Long = GROUP_COLORS.first())
+data class Group(
+    val id: String,
+    val name: String,
+    val color: Long = GROUP_COLORS.first(),
+    /** How strongly the folder's colour tints the Portfolio page: 0 off, 1 light, 2 strong. */
+    val tint: Int = 1,
+)
 
 const val DEFAULT_GROUP = "family"
 
@@ -189,17 +195,17 @@ class UserStore(context: Context) {
     }
 
     /** A new folder with its first member, e.g. "Parents" with "Appa". */
-    fun addGroup(name: String, color: Long, firstMember: String) {
+    fun addGroup(name: String, color: Long, firstMember: String, tint: Int = 1) {
         val gid = UUID.randomUUID().toString()
         val mid = UUID.randomUUID().toString()
         update { d ->
-            d.copy(groups = groupsOf(d) + Group(gid, name, color), members = d.members + Member(mid, firstMember, gid),
+            d.copy(groups = groupsOf(d) + Group(gid, name, color, tint), members = d.members + Member(mid, firstMember, gid),
                 portfolioGroup = gid, portfolioView = mid)
         }
     }
 
-    fun editGroup(id: String, name: String, color: Long) = update { d ->
-        d.copy(groups = groupsOf(d).map { if (it.id == id) it.copy(name = name, color = color) else it })
+    fun editGroup(id: String, name: String, color: Long, tint: Int) = update { d ->
+        d.copy(groups = groupsOf(d).map { if (it.id == id) it.copy(name = name, color = color, tint = tint) else it })
     }
 
     /** Removes a folder with its members and their holdings; the last folder can't be removed. */
