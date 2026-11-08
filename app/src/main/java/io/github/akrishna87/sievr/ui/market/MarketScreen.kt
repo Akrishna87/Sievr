@@ -95,23 +95,22 @@ fun MarketScreen() {
     }
 }
 
-private enum class Movers(val label: String) { GAINERS("Gainers"), LOSERS("Losers"), VOLUME("Volume"), HIGHS("52W highs"), LOWS("52W lows") }
 
 @Composable
 private fun MarketBody(market: Market) {
     val nav = LocalNav.current
     val state by SievrApp.instance.market.state.collectAsStateWithLifecycle()
-    var movers by rememberSaveable { mutableStateOf(Movers.GAINERS) }
+    val st = rememberMoversState()
     var chartIndex by rememberSaveable { mutableStateOf(0) }
-    val liquid = remember(market) { market.stocks.filter { (it["mcap"] ?: 0.0) >= 500 && it["chg1d"] != null } }
-    val moverList = remember(market, movers) {
-        when (movers) {
-            Movers.GAINERS -> liquid.sortedByDescending { it["chg1d"] }
-            Movers.LOSERS -> liquid.sortedBy { it["chg1d"] }
-            Movers.VOLUME -> liquid.filter { (it["turnover"] ?: 0.0) >= 1 }.sortedByDescending { it["volumeRatio"] ?: 0.0 }
-            Movers.HIGHS -> liquid.filter { it["newHigh52"] == 1.0 }.sortedByDescending { it["mcap"] }
-            Movers.LOWS -> liquid.filter { it["newLow52"] == 1.0 }.sortedByDescending { it["mcap"] }
-        }.take(10)
+    val app = SievrApp.instance
+    val mf by app.mf.state.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(st.asset) { if (st.asset == Asset.FUNDS) app.mf.start() }
+    var fundInfo by remember { mutableStateOf<io.github.akrishna87.sievr.core.mf.MfScheme?>(null) }
+    val moverList = remember(market, st.asset, st.kind, st.period, st.cap, st.count, st.sort, st.desc) {
+        if (st.asset == Asset.FUNDS) emptyList() else stockMovers(market, st)
+    }
+    val fundList = remember(mf.data, st.asset, st.kind, st.mfClass, st.count, st.sort, st.desc) {
+        if (st.asset != Asset.FUNDS) emptyList() else fundMovers(mf.data?.schemes.orEmpty(), st)
     }
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -136,16 +135,32 @@ private fun MarketBody(market: Market) {
         }
         item { Breadth(market) }
         item { SectionHeader("Top movers") }
-        item {
-            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
-                items(Movers.entries) { m -> FilterChip(movers == m, { movers = m }, { Text(m.label) }, Modifier.padding(4.dp)) }
+        item { MoversControls(st) }
+        if (st.asset == Asset.FUNDS) {
+            if (fundList.isEmpty()) item {
+                Text(
+                    when {
+                        mf.data == null && mf.error != null -> "Couldn't load fund NAVs: ${mf.error}"
+                        mf.data == null -> "Loading the latest NAVs…"
+                        else -> "No changes yet: a day's move needs two days of NAVs."
+                    },
+                    Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                item {
+                    Text("Growth plans, by the last day's NAV change · NAVs for ${Fmt.isoDate(fundList.first().date)}",
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(fundList, key = { "f" + it.code }) { s -> FundMoverRow(s) { fundInfo = s } }
             }
-        }
-        if (moverList.isEmpty()) item {
-            Text("None today.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        items(moverList, key = { "m" + it.symbol }) { s ->
-            StockRow(s, onClick = { nav.stock(s.symbol) }, trailingMetric = if (movers == Movers.VOLUME) "volumeRatio" else null)
+        } else {
+            if (moverList.isEmpty()) item {
+                Text("None today.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            items(moverList, key = { "m" + it.symbol }) { s ->
+                StockRow(s, onClick = { nav.stock(s.symbol) }, trailingMetric = trailingFor(st))
+            }
         }
         item { SectionHeader("Sectors today", action = "All sectors", onAction = { nav.go(Routes.SECTORS) }) }
         item { SectorHeatmap(market) }
@@ -169,6 +184,15 @@ private fun MarketBody(market: Market) {
                     }
                 }
             }
+        }
+    }
+    fundInfo?.let { s ->
+        val user by app.user.data.collectAsStateWithLifecycle()
+        val list = user.watchlists.first()
+        val watched = s.code in list.funds
+        io.github.akrishna87.sievr.ui.watchlist.FundInfoDialog(s, onDismiss = { fundInfo = null },
+            actionLabel = if (watched) "Remove from ${list.name}" else "Add to ${list.name}") {
+            app.user.toggleWatchFund(s.code, list.id); fundInfo = null
         }
     }
 }

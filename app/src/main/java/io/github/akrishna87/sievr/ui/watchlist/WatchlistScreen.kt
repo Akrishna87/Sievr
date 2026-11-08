@@ -62,6 +62,8 @@ fun WatchlistScreen() {
     var desc by rememberSaveable { mutableStateOf(true) }
     var removing by remember { mutableStateOf<String?>(null) }
     var addMenu by remember { mutableStateOf(false) }
+    // 0 everything, 1 stocks, 2 ETFs, 3 mutual funds
+    var kind by rememberSaveable { mutableStateOf(0) }
     var addingFund by remember { mutableStateOf(false) }
     var fundInfo by remember { mutableStateOf<io.github.akrishna87.sievr.core.mf.MfScheme?>(null) }
     val app = SievrApp.instance
@@ -93,8 +95,10 @@ fun WatchlistScreen() {
     }) { padding ->
         Column(Modifier.padding(padding)) {
             WithMarket { market ->
-                val stocks = remember(market, list.symbols, sortBy, desc) {
-                    val s = list.symbols.mapNotNull { market[it] }
+                val stocks = remember(market, list.symbols, sortBy, desc, kind) {
+                    val s = list.symbols.mapNotNull { market[it] }.filter {
+                        when (kind) { 1 -> !it.isEtf; 2 -> it.isEtf; 3 -> false; else -> true }
+                    }
                     sortBy?.let { ScreenEngine.sort(s, it, desc) } ?: s
                 }
                 val hScroll = rememberScrollState()
@@ -106,7 +110,28 @@ fun WatchlistScreen() {
                             }
                         }
                     }
-                    if (stocks.isEmpty() && list.funds.isEmpty()) item {
+                    item {
+                        val all = list.symbols.mapNotNull { market[it] }
+                        val nEtf = all.count { it.isEtf }
+                        androidx.compose.material3.ScrollableTabRow(selectedTabIndex = kind, edgePadding = 8.dp) {
+                            listOf("All (${all.size + list.funds.size})", "Stocks (${all.size - nEtf})", "ETFs ($nEtf)", "Mutual funds (${list.funds.size})")
+                                .forEachIndexed { i, label ->
+                                    androidx.compose.material3.Tab(kind == i, { kind = i }, text = { Text(label) })
+                                }
+                        }
+                    }
+                    val showFunds = kind == 0 || kind == 3
+                    if (kind != 0 && stocks.isEmpty() && !(showFunds && list.funds.isNotEmpty())) item {
+                        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            EmptyState(
+                                when (kind) { 1 -> "No stocks here yet"; 2 -> "No ETFs here yet"; else -> "No mutual funds here yet" },
+                                when (kind) { 3 -> "Follow a fund's NAV and daily move."; 2 -> "Search an ETF like NIFTYBEES or GOLDBEES."; else -> "Search by name or symbol, or speak it." },
+                            )
+                            androidx.compose.material3.Button(onClick = { if (kind == 3) addingFund = true else adding = true }) {
+                                Text(if (kind == 3) "Add mutual funds" else if (kind == 2) "Add ETFs" else "Add stocks")
+                            }
+                        }
+                    } else if (stocks.isEmpty() && list.funds.isEmpty()) item {
                         Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                             EmptyState("Start your ${list.name}", "Follow stocks, ETFs and mutual funds here, with today's price or NAV and " +
                                 "the day's move. Tip: tap the star on any stock page to add it. Long-press a row to remove it.")
@@ -126,8 +151,8 @@ fun WatchlistScreen() {
                         onOpen = { nav.stock(it.symbol) },
                         onLongPress = { removing = it.symbol },
                     )
-                    if (list.funds.isNotEmpty()) {
-                        item { io.github.akrishna87.sievr.ui.components.SectionHeader("Mutual funds (${list.funds.size})") }
+                    if (showFunds && list.funds.isNotEmpty()) {
+                        if (kind == 0) item { io.github.akrishna87.sievr.ui.components.SectionHeader("Mutual funds (${list.funds.size})") }
                         val byCode = mf.byCode
                         if (byCode.isEmpty()) item {
                             Text(if (mf.error != null) "Couldn't load fund NAVs: ${mf.error}" else "Loading the latest NAVs…",
@@ -212,7 +237,7 @@ private fun FundWatchRow(s: io.github.akrishna87.sievr.core.mf.MfScheme?, code: 
 }
 
 @Composable
-private fun FundInfoDialog(s: io.github.akrishna87.sievr.core.mf.MfScheme, onDismiss: () -> Unit, onRemove: () -> Unit) {
+internal fun FundInfoDialog(s: io.github.akrishna87.sievr.core.mf.MfScheme, onDismiss: () -> Unit, actionLabel: String = "Remove from list", onAction: () -> Unit) {
     val ty = androidx.compose.material3.MaterialTheme.typography
     val F = io.github.akrishna87.sievr.ui.components.Fmt
     AlertDialog(
@@ -232,7 +257,7 @@ private fun FundInfoDialog(s: io.github.akrishna87.sievr.core.mf.MfScheme, onDis
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        dismissButton = { TextButton(onClick = onRemove) { Text("Remove from list") } },
+        dismissButton = { TextButton(onClick = onAction) { Text(actionLabel) } },
     )
 }
 
