@@ -80,9 +80,13 @@ fun PortfolioScreen() {
     var reading by remember { mutableStateOf(false) }
     var shareResult by remember { mutableStateOf<io.github.akrishna87.sievr.core.portfolio.ShareStatement.Result?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val members = user.members
-    // With one member there's no family total: everything is that member's.
-    val view = if (members.size == 1) members.first().id
+    // Folders (Family, Parents…) and the members of the one being shown.
+    val groups = io.github.akrishna87.sievr.data.UserStore.groupsOf(user)
+    val group = groups.firstOrNull { it.id == user.portfolioGroup } ?: groups.first()
+    val members = user.members.filter { io.github.akrishna87.sievr.data.UserStore.groupOf(it, groups) == group.id }
+    val memberIds = members.map { it.id }.toSet()
+    // With one member there's no folder total: everything is that member's.
+    val view = if (members.size <= 1) members.firstOrNull()?.id ?: FAMILY
         else user.portfolioView.takeIf { v -> v == FAMILY || members.any { it.id == v } } ?: FAMILY
     val family = view == FAMILY
     // Whose portfolio the next add or import goes into.
@@ -149,10 +153,11 @@ fun PortfolioScreen() {
                 androidx.compose.material3.Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Stocks") })
                 androidx.compose.material3.Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Mutual funds") })
             }
-            MemberBar(members, view)
-            if (tab == 1) MutualFundsTab(view, members, target) { withOwner(it) }
+            GroupBar(groups, group)
+            MemberBar(members, view, group, groups)
+            if (tab == 1) MutualFundsTab(view, members, target, group.name) { withOwner(it) }
             else WithMarket { market ->
-                val mine = if (family) user.holdings else user.holdings.filter { it.owner == view }
+                val mine = if (family) user.holdings.filter { it.owner in memberIds } else user.holdings.filter { it.owner == view }
                 if (mine.isEmpty()) {
                     Column {
                         EmptyState("Track your shares and ETFs", "Import your demat statement (NSDL or CDSL CAS PDF) to bring in every share at once, " +
@@ -164,7 +169,7 @@ fun PortfolioScreen() {
                         }
                         TextButton(onClick = launchImport, Modifier.padding(horizontal = 8.dp)) { Text("Use your broker's report, Excel or CSV (has your buy prices)") }
                     }
-                } else PortfolioBody(mine, market, family, members, view) { h -> target = h.owner; editing = h.symbol to h }
+                } else PortfolioBody(mine, market, family, members, view, group.name) { h -> target = h.owner; editing = h.symbol to h }
                 if (picking) StockSearch(market, onDismiss = { picking = false }, title = "Add a holding" + (memberName?.takeIf { members.size > 1 }?.let { " for $it" } ?: ""),
                     recent = user.recentSymbols) {
                     picking = false
@@ -199,7 +204,7 @@ fun PortfolioScreen() {
 }
 
 @Composable
-private fun PortfolioBody(raw: List<Holding>, market: Market, family: Boolean, members: List<Member>, view: String, onEdit: (Holding) -> Unit) {
+private fun PortfolioBody(raw: List<Holding>, market: Market, family: Boolean, members: List<Member>, view: String, groupName: String, onEdit: (Holding) -> Unit) {
     val nav = LocalNav.current
     val holdings = remember(raw, family) { if (family) PortfolioAnalyzer.merge(raw) else raw }
     val r = remember(holdings, market) { PortfolioAnalyzer.analyze(holdings, market) }
@@ -209,7 +214,7 @@ private fun PortfolioBody(raw: List<Holding>, market: Market, family: Boolean, m
         Growth.portfolio(positions.mapNotNull { p -> Growth.parse(p.holding.since)?.let { Growth.Lot(it, p.cost, p.value) } },
             positions.sumOf { it.cost })
     }
-    val breakdown = remember(raw, market, family) {
+    val breakdown = remember(raw, market, family, members) {
         if (!family) emptyList() else members.map { m ->
             val mr = PortfolioAnalyzer.analyze(raw.filter { it.owner == m.id }, market)
             MemberTotals(m.name, mr.value, mr.cost)
@@ -217,7 +222,7 @@ private fun PortfolioBody(raw: List<Holding>, market: Market, family: Boolean, m
     }
     val label = when {
         members.size < 2 -> "Current value"
-        family -> "Family total · current value"
+        family -> "$groupName total · current value"
         else -> (members.firstOrNull { it.id == view }?.name ?: "") + " · current value"
     }
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {

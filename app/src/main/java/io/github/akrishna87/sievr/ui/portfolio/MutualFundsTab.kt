@@ -70,7 +70,7 @@ import io.github.akrishna87.sievr.ui.components.UserDate
 
 /** Mutual fund holdings valued at the latest NAVs from AMFI, which refresh by themselves every business day. */
 @Composable
-fun MutualFundsTab(view: String, members: List<Member>, target: String, withOwner: (() -> Unit) -> Unit) {
+fun MutualFundsTab(view: String, members: List<Member>, target: String, groupName: String, withOwner: (() -> Unit) -> Unit) {
     val app = SievrApp.instance
     val mf by app.mf.state.collectAsStateWithLifecycle()
     val user by app.user.data.collectAsStateWithLifecycle()
@@ -144,7 +144,10 @@ fun MutualFundsTab(view: String, members: List<Member>, target: String, withOwne
     }
 
     val family = view == FAMILY
-    val mine = remember(user.mfHoldings, view) { if (family) user.mfHoldings else user.mfHoldings.filter { it.owner == view } }
+    val mine = remember(user.mfHoldings, view, members) {
+        val ids = members.map { it.id }.toSet()
+        if (family) user.mfHoldings.filter { it.owner in ids } else user.mfHoldings.filter { it.owner == view }
+    }
     val report = remember(mine, mf.byCode) { MutualFunds.analyze(if (family) MutualFunds.merge(mine) else mine, mf.byCode) }
     // CAGR from each member's own funds and dates.
     val growth = remember(mine, mf.byCode) {
@@ -160,7 +163,7 @@ fun MutualFundsTab(view: String, members: List<Member>, target: String, withOwne
     }
     val label = when {
         members.size < 2 -> "Current value"
-        family -> "Family total · current value"
+        family -> "$groupName total · current value"
         else -> (members.firstOrNull { it.id == view }?.name ?: "") + " · current value"
     }
     val targetName = members.firstOrNull { it.id == target }?.name?.takeIf { members.size > 1 }

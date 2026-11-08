@@ -25,7 +25,18 @@ data class Watchlist(val id: String, val name: String, val symbols: List<String>
 
 /** A family member whose stocks and funds are tracked separately. */
 @Serializable
-data class Member(val id: String, val name: String)
+data class Member(val id: String, val name: String, val group: String = DEFAULT_GROUP)
+
+/** A folder of members whose portfolios are added up together, e.g. "Family" (me and my wife) or "Parents". */
+@Serializable
+data class Group(val id: String, val name: String, val color: Long = GROUP_COLORS.first())
+
+const val DEFAULT_GROUP = "family"
+
+/** Folder colours to choose from (ARGB). */
+val GROUP_COLORS: List<Long> = listOf(
+    0xFF2E7D32, 0xFF1565C0, 0xFF6A1B9A, 0xFFC62828, 0xFFEF6C00, 0xFF00838F, 0xFFAD1457, 0xFF5D4037, 0xFF455A64, 0xFFF9A825,
+)
 
 /** The Portfolio view that shows everyone together. */
 const val FAMILY = "all"
@@ -40,6 +51,10 @@ data class UserData(
     val members: List<Member> = listOf(Member(io.github.akrishna87.sievr.core.portfolio.DEFAULT_OWNER, "Me")),
     /** The Portfolio view last chosen: a member's id, or FAMILY for everyone together. */
     val portfolioView: String = FAMILY,
+    /** Folders of members; everyone starts in "Family". */
+    val groups: List<Group> = listOf(Group(DEFAULT_GROUP, "Family")),
+    /** The folder shown on the Portfolio screen. */
+    val portfolioGroup: String = DEFAULT_GROUP,
     val priceAlerts: List<PriceAlert> = emptyList(),
     /** Last results of each screen with alerts on, to find what entered and left. */
     val screenMatches: Map<String, Set<String>> = emptyMap(),
@@ -162,17 +177,55 @@ class UserStore(context: Context) {
 
     // ---- family members
 
-    fun addMember(name: String): String {
+    fun addMember(name: String, group: String = DEFAULT_GROUP): String {
         val id = UUID.randomUUID().toString()
-        update { it.copy(members = it.members + Member(id, name), portfolioView = id) }
+        update { it.copy(members = it.members + Member(id, name, group), portfolioView = id, portfolioGroup = group) }
         return id
     }
+
+    /** Moves a member (and their holdings with them) to another folder. */
+    fun moveMember(id: String, group: String) = update { d ->
+        d.copy(members = d.members.map { if (it.id == id) it.copy(group = group) else it }, portfolioGroup = group, portfolioView = FAMILY)
+    }
+
+    /** A new folder with its first member, e.g. "Parents" with "Appa". */
+    fun addGroup(name: String, color: Long, firstMember: String) {
+        val gid = UUID.randomUUID().toString()
+        val mid = UUID.randomUUID().toString()
+        update { d ->
+            d.copy(groups = groupsOf(d) + Group(gid, name, color), members = d.members + Member(mid, firstMember, gid),
+                portfolioGroup = gid, portfolioView = mid)
+        }
+    }
+
+    fun editGroup(id: String, name: String, color: Long) = update { d ->
+        d.copy(groups = groupsOf(d).map { if (it.id == id) it.copy(name = name, color = color) else it })
+    }
+
+    /** Removes a folder with its members and their holdings; the last folder can't be removed. */
+    fun removeGroup(id: String) = update { d ->
+        val groups = groupsOf(d)
+        if (groups.size <= 1) return@update d
+        val gone = d.members.filter { groupOf(it, groups) == id }.map { it.id }.toSet()
+        d.copy(
+            groups = groups.filterNot { it.id == id },
+            members = d.members.filterNot { it.id in gone },
+            holdings = d.holdings.filterNot { it.owner in gone },
+            mfHoldings = d.mfHoldings.filterNot { it.owner in gone },
+            portfolioGroup = groups.first { it.id != id }.id,
+            portfolioView = FAMILY,
+        )
+    }
+
+    fun setPortfolioGroup(id: String) = update { it.copy(portfolioGroup = id, portfolioView = FAMILY) }
 
     fun renameMember(id: String, name: String) = update { d -> d.copy(members = d.members.map { if (it.id == id) it.copy(name = name) else it }) }
 
     /** Removes a member and their holdings; the last member can't be removed. */
     fun removeMember(id: String) = update { d ->
-        if (d.members.size <= 1) d
+        val groups = groupsOf(d)
+        val group = d.members.firstOrNull { it.id == id }?.let { groupOf(it, groups) }
+        if (d.members.count { groupOf(it, groups) == group } <= 1) d
         else d.copy(
             members = d.members.filterNot { it.id == id },
             holdings = d.holdings.filterNot { it.owner == id },
@@ -189,5 +242,13 @@ class UserStore(context: Context) {
     fun removeAlert(id: String) = update { d -> d.copy(priceAlerts = d.priceAlerts.filterNot { it.id == id }) }
     fun setAlertActive(id: String, active: Boolean) = update { d ->
         d.copy(priceAlerts = d.priceAlerts.map { if (it.id == id) it.copy(active = active) else it })
+    }
+
+    companion object {
+        /** The folders, never empty. */
+        fun groupsOf(d: UserData): List<Group> = d.groups.ifEmpty { listOf(Group(DEFAULT_GROUP, "Family")) }
+
+        /** A member's folder, or the first folder if theirs no longer exists. */
+        fun groupOf(m: Member, groups: List<Group>): String = m.group.takeIf { g -> groups.any { it.id == g } } ?: groups.first().id
     }
 }
