@@ -78,7 +78,7 @@ fun MarketScreen() {
             title = { Text("Sievr") },
             actions = {
                 IconButton(onClick = { searching = true }) { Icon(Icons.Default.Search, "Search stocks") }
-                IconButton(onClick = { scope.launch { app.market.refresh(force = false) } }) { Icon(Icons.Default.Refresh, "Check for new data") }
+                IconButton(onClick = { scope.launch { app.market.refresh(force = true) } }) { Icon(Icons.Default.Refresh, "Download latest data") }
             },
         )
     }) { padding ->
