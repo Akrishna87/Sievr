@@ -61,27 +61,37 @@ class MarketRepository(private val context: Context) {
     suspend fun refresh(force: Boolean): Boolean = mutex.withLock {
         setRefreshing(true)
         try {
+            // Release assets are replaced in place, so bypass any cached redirect or asset response.
+            val cacheBust = "?refresh=${System.currentTimeMillis()}"
             val meta = withContext(Dispatchers.IO) {
-                SnapshotIO.json.decodeFromString(Meta.serializer(), String(fetch(BuildConfig.DATA_URL + "meta.json")))
+                SnapshotIO.json.decodeFromString(Meta.serializer(), String(fetch(BuildConfig.DATA_URL + "meta.json" + cacheBust)))
             }
             prefs.edit().putLong("checkedAt", System.currentTimeMillis()).apply()
             val have = prefs.getString("generatedAt", null)
-            if (!force && have == meta.generatedAt && file.exists()) {
+            val verified = prefs.getString("verifiedGeneratedAt", null)
+            if (!force && have == meta.generatedAt && verified == meta.generatedAt && file.exists()) {
                 if (market == null) load()
                 setRefreshing(false)
                 return false
             }
             withContext(Dispatchers.IO) {
                 val tmp = File(context.filesDir, "snapshot.download")
-                tmp.writeBytes(fetch(BuildConfig.DATA_URL + "snapshot.json.gz"))
-                // Make sure it parses before replacing the good copy.
-                tmp.inputStream().use { SnapshotIO.read(it) }
+                tmp.writeBytes(fetch(BuildConfig.DATA_URL + "snapshot.json.gz" + cacheBust))
+                // Parse and verify it before replacing the good copy or recording its version.
+                val downloaded = tmp.inputStream().use { SnapshotIO.read(it) }
+                if (downloaded.generatedAt != meta.generatedAt || downloaded.asOf != meta.asOf) {
+                    tmp.delete()
+                    throw IllegalStateException("Downloaded snapshot does not match the latest metadata")
+                }
                 if (!tmp.renameTo(file)) {
                     tmp.copyTo(file, overwrite = true)
                     tmp.delete()
                 }
             }
-            prefs.edit().putString("generatedAt", meta.generatedAt).apply()
+            prefs.edit()
+                .putString("generatedAt", meta.generatedAt)
+                .putString("verifiedGeneratedAt", meta.generatedAt)
+                .apply()
             load()
             true
         } catch (e: Exception) {
